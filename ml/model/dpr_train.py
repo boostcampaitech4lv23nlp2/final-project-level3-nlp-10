@@ -1,5 +1,6 @@
 import random
 import sys
+from pprint import pprint
 
 import numpy as np
 import torch
@@ -18,12 +19,10 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
-param_keys = ["model_name", "seed", "num_neg", "num_train_epochs", "learning_rate", "batch_size", "test_sample"]
-
 model_name = "klue/bert-base"
 seed = 12345
 num_neg = 7
-test_sample = 100
+test_sample = 1500
 num_train_epochs = 1
 learning_rate = 5e-5
 batch_size = 4
@@ -270,12 +269,20 @@ def train():
     )
     retriever.train()
 
-    p_encoder.save_pretrained("./p_encoder")
-    q_encoder.save_pretrained("./q_encoder")
+    p_encoder.save_pretrained(f"./saved_models/{model_name}/p_encoder")
+    q_encoder.save_pretrained(f"./saved_models/{model_name}/q_encoder")
+
+    query = "제주도 시청의 주소는 뭐야?"
+    results = retriever.get_relevant_doc(query=query, k=5)
+    print(f"[Search Query] {query}\n")
+
+    indices = results.tolist()
+    for i, idx in enumerate(indices):
+        print(f"Top-{i + 1}th Passage (Index {idx})")
+        pprint(retriever.dataset["context"][idx])
 
 
 if __name__ == "__main__":
-    print(sys.argv)
     if len(sys.argv) > 1:
         model_name = sys.argv[1]
     train()
