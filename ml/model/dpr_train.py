@@ -1,4 +1,5 @@
 import random
+import sys
 
 import numpy as np
 import torch
@@ -17,10 +18,12 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
+param_keys = ["model_name", "seed", "num_neg", "num_train_epochs", "learning_rate", "batch_size", "test_sample"]
+
 model_name = "klue/bert-base"
 seed = 12345
-num_neg = 1
-test_sample = 137
+num_neg = 7
+test_sample = 100
 num_train_epochs = 1
 learning_rate = 5e-5
 batch_size = 4
@@ -100,7 +103,6 @@ class DenseRetrieval:
         self.passage_dataloader = DataLoader(passage_dataset, batch_size=self.args.per_device_train_batch_size)
 
     def train(self, args=None):
-
         if args is None:
             args = self.args
 
@@ -273,4 +275,7 @@ def train():
 
 
 if __name__ == "__main__":
+    print(sys.argv)
+    if len(sys.argv) > 1:
+        model_name = sys.argv[1]
     train()
