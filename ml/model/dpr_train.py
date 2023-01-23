@@ -5,6 +5,7 @@ from pprint import pprint
 import numpy as np
 import torch
 import torch.nn.functional as F
+import wandb
 from datasets import load_dataset
 
 # from sklearn.feature_extraction.text import TfidfVectorizer
@@ -22,10 +23,13 @@ from transformers import (
 model_name = "klue/bert-base"
 seed = 12345
 num_neg = 7
-test_sample = 1500
-num_train_epochs = 1
+test_sample = 1000
+num_train_epochs = 3
 learning_rate = 5e-5
 batch_size = 4
+
+project_name = "Final_DPR_KLUE"
+entity_name = "boost2end"
 
 
 class DenseRetrieval:
@@ -143,6 +147,7 @@ class DenseRetrieval:
         for _ in train_iterator:
 
             with tqdm(self.train_dataloader, unit="batch") as tepoch:
+                total_loss = 0
                 for batch in tepoch:
                     self.p_encoder.train()
                     self.q_encoder.train()
@@ -179,6 +184,8 @@ class DenseRetrieval:
                     loss = F.nll_loss(sim_scores, targets)
                     tepoch.set_postfix(loss=f"{str(loss.item())}")
 
+                    total_loss += loss
+                    wandb.log({"train/loss": loss})
                     loss.backward()
                     optimizer.step()
                     scheduler.step()
@@ -191,6 +198,7 @@ class DenseRetrieval:
                     torch.cuda.empty_cache()
 
                     del p_inputs, q_inputs
+                wandb.log({"train/loss_mean": total_loss / len(tepoch)})
 
     def get_relevant_doc(self, query, k=1, args=None, p_encoder=None, q_encoder=None):
 
@@ -247,6 +255,9 @@ def train():
     if test_sample > 0:
         train_dataset = train_dataset[:test_sample]
 
+    wandb.login()
+    wandb.init(project=project_name, entity=entity_name, name=f"{model_name}/epoch{num_train_epochs}")
+
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     np.random.seed(seed)
@@ -264,6 +275,7 @@ def train():
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     p_encoder = BertEncoder.from_pretrained(model_name).to(args.device)
     q_encoder = BertEncoder.from_pretrained(model_name).to(args.device)
+    wandb.watch((p_encoder, q_encoder))
     retriever = DenseRetrieval(
         args=args, dataset=train_dataset, num_neg=num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder
     )
