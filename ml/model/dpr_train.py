@@ -143,17 +143,9 @@ class DenseRetrieval:
 
             with tqdm(self.train_dataloader, unit="batch") as tepoch:
                 for batch in tepoch:
-
                     self.p_encoder.train()
                     self.q_encoder.train()
 
-                    """
-                    p_inputs = {
-                        'input_ids': batch[0].view(batch_size * (self.num_neg + 1), -1).to(args.device),
-                        'attention_mask': batch[1].view(batch_size * (self.num_neg + 1), -1).to(args.device),
-                        'token_type_ids': batch[2].view(batch_size * (self.num_neg + 1), -1).to(args.device)
-                    }
-                    """
                     p_inputs = {
                         "input_ids": batch[0].view(-1, self.max_len).to(args.device),
                         "attention_mask": batch[1].view(-1, self.max_len).to(args.device),
