@@ -23,7 +23,7 @@ from transformers import (
 model_name = "klue/bert-base"
 seed = 12345
 num_neg = 7
-test_sample = 1000
+test_sample = 100
 num_train_epochs = 3
 learning_rate = 5e-5
 batch_size = 4
@@ -281,8 +281,8 @@ def train():
     )
     retriever.train()
 
-    p_encoder.save_pretrained(f"./saved_models/{model_name}/p_encoder")
-    q_encoder.save_pretrained(f"./saved_models/{model_name}/q_encoder")
+    p_encoder.save_pretrained(f"./saved_models/{model_name.replace('/', '_')}/p_encoder")
+    q_encoder.save_pretrained(f"./saved_models/{model_name.replace('/', '_')}/q_encoder")
 
     query = "제주도 시청의 주소는 뭐야?"
     results = retriever.get_relevant_doc(query=query, k=5)
