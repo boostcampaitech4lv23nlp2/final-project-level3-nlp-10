@@ -23,8 +23,8 @@ from transformers import (
 model_name = "klue/bert-base"
 seed = 12345
 num_neg = 7
-test_sample = 100
-num_train_epochs = 3
+test_sample = -1
+num_train_epochs = 5
 learning_rate = 5e-5
 batch_size = 4
 
