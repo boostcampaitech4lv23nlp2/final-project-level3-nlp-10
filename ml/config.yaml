@@ -1,0 +1,4 @@
+dpr:
+  eval:
+    p_encoder_path: model/saved_models/klue_bert-base/p_encoder
+    q_encoder_path: model/saved_models/klue_bert-base/q_encoder
