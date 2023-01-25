@@ -5,14 +5,14 @@ Open-Domain Question Answering 을 수행하는 inference 코드 입니다.
 """
 
 
-from typing import Callable, Dict, List, NoReturn, Tuple
+from typing import Dict, NoReturn, Tuple
 
 import logging
 import sys
 
 import numpy as np
-from datasets import Dataset, DatasetDict, Features, Sequence, Value, load_from_disk, load_metric
-from omegaconf import OmegaConf
+from datasets import DatasetDict, load_dataset, load_metric
+from model.models import BertEncoder
 from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
@@ -23,27 +23,32 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
+from utils.dpr import DenseRetrieval
+from utils.mrc.arguments import DataTrainingArguments, ModelArguments
 
-from ml.utils.mrc.arguments import DataTrainingArguments, ModelArguments
-from ml.utils.mrc.retrieval import SparseRetrieval
-from ml.utils.mrc.trainer_qa import QuestionAnsweringTrainer
-from ml.utils.mrc.utils_qa import check_no_error, postprocess_qa_predictions
+# from utils.mrc.retrieval import SparseRetrieval
+from utils.mrc.trainer_qa import QuestionAnsweringTrainer
+from utils.mrc.utils_qa import check_no_error, postprocess_qa_predictions
 
 logger = logging.getLogger(__name__)
 
+seed = 12345
 
-def main():
+
+def eval(conf):
     # 가능한 arguments 들은 ./arguments.py 나 transformer package 안의 src/transformers/training_args.py 에서 확인 가능합니다.
     # --help flag 를 실행시켜서 확인할 수 도 있습니다.
-    conf = OmegaConf.load("../config.yaml")
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     print("topk : ", str(data_args.top_k_retrieval))
     print("\n\n")
+
+    """
     # dataset_name을 test_path로 바꿔줍니다.
     data_args.dataset_name = conf.others.test_path
 
     training_args.do_train = True
+    """
 
     print(f"model is from {model_args.model_name_or_path}")
     print(f"data is from {data_args.dataset_name}")
@@ -59,9 +64,10 @@ def main():
     logger.info("Training/evaluation parameters %s", training_args)
 
     # 모델을 초기화하기 전에 난수를 고정합니다.
-    set_seed(training_args.seed)
+    set_seed(conf.common.seed)
 
-    datasets = load_from_disk(data_args.dataset_name)
+    # datasets = load_from_disk(data_args.dataset_name)
+    datasets = load_dataset("klue", "mrc")
     print(datasets)
 
     # AutoConfig를 이용하여 pretrained model 과 tokenizer를 불러옵니다.
@@ -81,15 +87,42 @@ def main():
 
     # True일 경우 : run passage retrieval
     if data_args.eval_retrieval:
+        """
         datasets = run_sparse_retrieval(
             tokenizer.tokenize, datasets, training_args, data_args, use_bm25=conf.others.use_bm25
         )
+        """
+        datasets = run_dense_retrieval(conf, training_args, datasets)
 
     # eval or predict mrc model
     if training_args.do_eval or training_args.do_predict:
         run_mrc(data_args, training_args, model_args, datasets, tokenizer, model)
 
 
+def run_dense_retrieval(conf, training_args, datasets):
+    p_encoder = BertEncoder.from_pretrained(conf.dpr.eval.p_encoder_path)
+    q_encoder = BertEncoder.from_pretrained(conf.dpr.eval.q_encoder_path)
+    tokenizer = AutoTokenizer.from_pretrained("klue/bert-base")  # TODO p_encoder path로는 tokenizer를 받아오지 못하는 문제
+    retriever = DenseRetrieval(
+        args=training_args,
+        dataset=datasets["validation"],
+        num_neg=-1,
+        tokenizer=tokenizer,
+        p_encoder=p_encoder,
+        q_encoder=q_encoder,
+        eval=True,
+    )
+    retriever.set_passage_dataloader()
+    # print(type(datasets['validation']['question']))
+    retriever.create_passage_embeddings()
+    # passage embedding들을 p_encoder로 미리 만들어놔야 할 듯.
+    # 이후 models의 get_relevant_doc_bulk에서 q_encoder를 통해 query_vec을 만들고 p_embedding들과 내적해서 result 구하기.
+    quit()
+
+    # df = retriver.
+
+
+"""
 def run_sparse_retrieval(
     tokenize_fn: Callable[[str], List[str]],
     datasets: DatasetDict,
@@ -139,6 +172,7 @@ def run_sparse_retrieval(
         )
     datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
     return datasets
+"""
 
 
 def run_mrc(
@@ -281,4 +315,4 @@ def run_mrc(
 
 
 if __name__ == "__main__":
-    main()
+    eval()

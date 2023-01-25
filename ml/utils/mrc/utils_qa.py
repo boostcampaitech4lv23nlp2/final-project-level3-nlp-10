@@ -26,11 +26,11 @@ import random
 
 import numpy as np
 import torch
-from arguments import DataTrainingArguments
 from datasets import DatasetDict
 from tqdm.auto import tqdm
 from transformers import PreTrainedTokenizerFast, TrainingArguments, is_torch_available
 from transformers.trainer_utils import get_last_checkpoint
+from utils.mrc.arguments import DataTrainingArguments
 
 logger = logging.getLogger(__name__)
 

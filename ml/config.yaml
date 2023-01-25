@@ -1,3 +1,5 @@
+common:
+  seed: 12345
 dpr:
   eval:
     p_encoder_path: model/saved_models/klue_bert-base/p_encoder

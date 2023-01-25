@@ -40,7 +40,6 @@ class DenseRetrieval:
 
         self.passages = dataset["context"]
 
-        # self.passages = list(dict.fromkeys([v["context"] for v in wiki.values()])) # datasets 로 바꿔야 함.
         print(f"Lengths of unique contexts : {len(self.passages)}")
         self.ids = list(range(len(self.passages)))
 

@@ -6,10 +6,11 @@ import numpy as np
 import torch
 import wandb
 from datasets import load_dataset
-from model.models import BertEncoder, DenseRetrieval
+from model.models import BertEncoder
 
 # from sklearn.feature_extraction.text import TfidfVectorizer
 from transformers import AutoTokenizer, TrainingArguments
+from utils.dpr import DenseRetrieval
 
 # model_name = "klue/bert-base"
 seed = 12345
