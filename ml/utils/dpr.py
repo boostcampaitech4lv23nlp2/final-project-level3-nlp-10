@@ -1,5 +1,3 @@
-from typing import List, Optional, Tuple
-
 import os
 import pickle
 
@@ -21,8 +19,7 @@ class DenseRetrieval:
         tokenizer,
         p_encoder,
         q_encoder,
-        data_path="data/MRC_dataset/",
-        passage_path="data/MRC_dataset/wikipedia_documents.json",
+        emb_save_path="data/MRC_dataset/",
         eval=False,
     ):
 
@@ -32,7 +29,7 @@ class DenseRetrieval:
         self.args = args
         self.dataset = dataset
         self.num_neg = num_neg
-        self.data_path = data_path
+        self.emb_save_path = emb_save_path
 
         self.tokenizer = tokenizer
         self.p_encoder = p_encoder
@@ -48,7 +45,7 @@ class DenseRetrieval:
 
     def create_passage_embeddings(self):
         pickle_name = "dense_embedding.bin"
-        emb_path = os.path.join(self.data_path, pickle_name)
+        emb_path = os.path.join(self.emb_save_path, pickle_name)
 
         if os.path.isfile(emb_path):
             with open(emb_path, "rb") as file:
@@ -127,18 +124,15 @@ class DenseRetrieval:
             train_dataset, shuffle=True, batch_size=self.args.per_device_train_batch_size
         )
 
-        valid_seqs = tokenizer(dataset["context"], padding="max_length", truncation=True, return_tensors="pt")
-        passage_dataset = TensorDataset(
-            valid_seqs["input_ids"], valid_seqs["attention_mask"], valid_seqs["token_type_ids"]
-        )
-        self.passage_dataloader = DataLoader(passage_dataset, batch_size=self.args.per_device_train_batch_size)
+        self.set_passage_dataloader()
 
     def set_passage_dataloader(self):
         valid_seqs = self.tokenizer(self.dataset["context"], padding="max_length", truncation=True, return_tensors="pt")
         passage_dataset = TensorDataset(
             valid_seqs["input_ids"], valid_seqs["attention_mask"], valid_seqs["token_type_ids"]
         )
-        self.passage_dataloader = DataLoader(passage_dataset, batch_size=self.args.per_device_train_batch_size)
+        # self.passage_dataloader = DataLoader(passage_dataset, batch_size=self.args.per_device_train_batch_size)
+        self.passage_dataloader = DataLoader(passage_dataset, batch_size=1)
 
     def train(self, args=None):
         if args is None:
@@ -186,6 +180,11 @@ class DenseRetrieval:
                 for batch in tepoch:
                     self.p_encoder.train()
                     self.q_encoder.train()
+                    print("-" * 50)
+                    print("입력")
+                    print(batch[0].size())
+                    print(batch[3].size())
+                    print()
 
                     p_inputs = {
                         "input_ids": batch[0].view(-1, self.max_len).to(args.device),
@@ -199,9 +198,22 @@ class DenseRetrieval:
                         "token_type_ids": batch[5].to(args.device),
                     }
 
+                    print("p_input")
+                    print(p_inputs["input_ids"].size())
+                    print(q_inputs["input_ids"].size())
+                    print()
+                    """
+                        batch_size:4, query: 15, document: 15, negative_sampling: 4 -> 총 document : 75
+                        1st batch : (1개 query 5개의 document)
+                        15th batch : (1개의 query )
+                    """
+
                     p_outputs = self.p_encoder(**p_inputs)  # (batch_size*(num_neg+1), emb_dim)
                     q_outputs = self.q_encoder(**q_inputs)  # (batch_size*, emb_dim)
 
+                    print("모델 아웃풋")
+                    print(p_outputs.size())
+                    print(q_outputs.size())
                     # Calculate similarity score & loss
                     p_batch_size = int(p_inputs["input_ids"].size()[0] / (self.num_neg + 1))
                     q_batch_size = q_inputs["input_ids"].size()[0]
@@ -255,8 +267,9 @@ class DenseRetrieval:
             )
             q_emb = q_encoder(**q_seqs_val).to("cpu")  # (num_query=1, emb_dim)
 
+            """
             p_embs = []
-            for batch in self.passage_dataloader:
+            for batch in tqdm(self.passage_dataloader, desc=):
 
                 batch = tuple(t.to(args.device) for t in batch)
                 p_inputs = {"input_ids": batch[0], "attention_mask": batch[1], "token_type_ids": batch[2]}
@@ -264,33 +277,9 @@ class DenseRetrieval:
                 p_embs.append(p_emb)
 
         p_embs = torch.stack(p_embs, dim=0).view(len(self.passage_dataloader.dataset), -1)  # (num_passage, emb_dim)
-
         dot_prod_scores = torch.matmul(q_emb, torch.transpose(p_embs, 0, 1))
+        """
+
+        dot_prod_scores = torch.matmul(q_emb, torch.transpose(self.p_embedding, 0, 1))
         rank = torch.argsort(dot_prod_scores, dim=1, descending=True).squeeze()
         return rank[:k]
-
-    def get_relevant_doc_bulk(self, queries: List, k: Optional[int] = 1) -> Tuple[List, List]:
-
-        """
-        Arguments:
-            queries (List):
-                하나의 Query를 받습니다.
-            k (Optional[int]): 1
-                상위 몇 개의 Passage를 반환할지 정합니다.
-        Note:
-            vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
-        """
-
-        query_vec = self.tfidfv.transform(queries)
-        assert np.sum(query_vec) != 0, "오류가 발생했습니다. 이 오류는 보통 query에 vectorizer의 vocab에 없는 단어만 존재하는 경우 발생합니다."
-
-        result = query_vec * self.p_embedding.T
-        if not isinstance(result, np.ndarray):
-            result = result.toarray()
-        doc_scores = []
-        doc_indices = []
-        for i in range(result.shape[0]):
-            sorted_result = np.argsort(result[i, :])[::-1]
-            doc_scores.append(result[i, :][sorted_result].tolist()[:k])
-            doc_indices.append(sorted_result.tolist()[:k])
-        return doc_scores, doc_indices

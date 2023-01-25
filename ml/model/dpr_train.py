@@ -14,8 +14,8 @@ from utils.dpr import DenseRetrieval
 
 # model_name = "klue/bert-base"
 seed = 12345
-num_neg = 7
-test_sample = -1
+num_neg = 2
+test_sample = 15
 num_train_epochs = 5
 learning_rate = 5e-5
 batch_size = 4
@@ -55,9 +55,11 @@ def train(model_name="klue/bert-base"):
     )
     retriever.train()
 
+    # encoder 저장
     p_encoder.save_pretrained(f"./saved_models/{model_name.replace('/', '_')}/p_encoder")
     q_encoder.save_pretrained(f"./saved_models/{model_name.replace('/', '_')}/q_encoder")
 
+    # 테스트
     query = "제주도 시청의 주소는 뭐야?"
     results = retriever.get_relevant_doc(query=query, k=5)
     print(f"[Search Query] {query}\n")

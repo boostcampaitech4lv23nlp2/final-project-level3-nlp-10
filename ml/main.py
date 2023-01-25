@@ -1,7 +1,7 @@
 # import sys
-from model.dpr_eval import eval as dpr_eval
-
+# from model.dpr_eval import eval as dpr_eval
 # from model.dpr_train import train as dpr_train
+from model.fid_train import train as fid_train
 from omegaconf import OmegaConf
 
 if __name__ == "__main__":
@@ -14,4 +14,5 @@ if __name__ == "__main__":
     """
     conf = OmegaConf.load("./config.yaml")
     # dpr_train(conf)
-    dpr_eval(conf)
+    # dpr_train()
+    fid_train(conf)

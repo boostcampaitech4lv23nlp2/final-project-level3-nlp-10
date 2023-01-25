@@ -102,7 +102,9 @@ def eval(conf):
 def run_dense_retrieval(conf, training_args, datasets):
     p_encoder = BertEncoder.from_pretrained(conf.dpr.eval.p_encoder_path)
     q_encoder = BertEncoder.from_pretrained(conf.dpr.eval.q_encoder_path)
-    tokenizer = AutoTokenizer.from_pretrained("klue/bert-base")  # TODO p_encoder path로는 tokenizer를 받아오지 못하는 문제
+    tokenizer = AutoTokenizer.from_pretrained(
+        conf.dpr.encoder_tokenizer
+    )  # TODO p_encoder path로는 tokenizer를 받아오지 못하는 문제
     retriever = DenseRetrieval(
         args=training_args,
         dataset=datasets["validation"],

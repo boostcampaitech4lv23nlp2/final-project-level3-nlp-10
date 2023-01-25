@@ -1,6 +1,19 @@
 common:
   seed: 12345
 dpr:
+  emb_save_path: data/MRC_dataset/
+  encoder_tokenizer: klue/bert-base
+  do_eval: True
   eval:
     p_encoder_path: model/saved_models/klue_bert-base/p_encoder
     q_encoder_path: model/saved_models/klue_bert-base/q_encoder
+  train:
+    neg_num: 7
+
+fid:
+  encoder_tokenizer: klue/bert-base
+  emb_save_path: data/MRC_dataset/
+  p_encoder_path: model/saved_models/klue_bert-base/p_encoder
+  q_encoder_path: model/saved_models/klue_bert-base/q_encoder
+  reader_model: alaggung/bart-r3f
+  topk: 5
