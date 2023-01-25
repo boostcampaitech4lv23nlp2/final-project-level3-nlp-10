@@ -1,5 +1,8 @@
 from typing import List, Optional, Tuple
 
+import os
+import pickle
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -10,21 +13,69 @@ from transformers import AdamW, get_linear_schedule_with_warmup
 
 
 class DenseRetrieval:
-    def __init__(self, args, dataset, num_neg, tokenizer, p_encoder, q_encoder, eval=False):
+    def __init__(
+        self,
+        args,
+        dataset,
+        num_neg,
+        tokenizer,
+        p_encoder,
+        q_encoder,
+        data_path="data/MRC_dataset/",
+        passage_path="data/MRC_dataset/wikipedia_documents.json",
+        eval=False,
+    ):
 
         """
-        학습과 추론에 사용될 여러 셋업을 마쳐봅시다.
+        현재 MRC_dataset에 맞춰져 있음(특히 passage들을 읽는 부분)
         """
         self.args = args
         self.dataset = dataset
         self.num_neg = num_neg
+        self.data_path = data_path
 
         self.tokenizer = tokenizer
         self.p_encoder = p_encoder
         self.q_encoder = q_encoder
 
+        self.passages = dataset["context"]
+
+        # self.passages = list(dict.fromkeys([v["context"] for v in wiki.values()])) # datasets 로 바꿔야 함.
+        print(f"Lengths of unique contexts : {len(self.passages)}")
+        self.ids = list(range(len(self.passages)))
+
         if not eval:
             self.prepare_in_batch_negative(num_neg=num_neg)
+
+    def create_passage_embeddings(self):
+        pickle_name = "dense_embedding.bin"
+        emb_path = os.path.join(self.data_path, pickle_name)
+
+        if os.path.isfile(emb_path):
+            with open(emb_path, "rb") as file:
+                self.p_embedding = pickle.load(file)
+            print("Embedding pickle load.")
+        else:
+            print("Build passage embedding")
+            tokenized_embs = self.tokenizer(self.passages, padding="max_length", truncation=True, return_tensors="pt")
+            tokenized_embs = tokenized_embs.to("cuda")
+            self.p_encoder.to("cuda")
+
+            self.p_embedding = torch.zeros(tokenized_embs["input_ids"].size(0), 768)  # Bert_encoder만을 위한 상수!
+            for i in tqdm(range(0, len(tokenized_embs["input_ids"]), self.args.per_device_eval_batch_size)):
+                end = (
+                    i + self.args.per_device_eval_batch_size
+                    if i + self.args.per_device_eval_batch_size < len(tokenized_embs["input_ids"])
+                    else None
+                )
+                input_ids = tokenized_embs["input_ids"][i:end]
+                attention_mask = tokenized_embs["attention_mask"][i:end]
+                token_type_ids = tokenized_embs["token_type_ids"][i:end]
+                self.p_embedding[i:end] = self.p_encoder(input_ids, attention_mask, token_type_ids).detach().cpu()
+
+            with open(emb_path, "wb") as file:
+                pickle.dump(self.p_embedding, file)
+            print("embedding pickle saved.")
 
     def prepare_in_batch_negative(self, dataset=None, num_neg=2, tokenizer=None):
         if dataset is None:
