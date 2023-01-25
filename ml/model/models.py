@@ -45,6 +45,7 @@ class FiD(nn.Module):
         self.p_encoder = p_encoder
         self.r_encoder = reader.get_encoder()
         self.r_decoder = reader.get_decoder()
+        self.reader = reader
         self.r_embedding = list(reader.base_model.children())[0]
         self.encoder_tokenizer = encoder_tokenizer
         self.datasets = passage_dataset
@@ -91,18 +92,21 @@ class FiD(nn.Module):
             encoder_tokenizer=encoder_tokenizer,
         )
 
-    def forward(self, query):
+    def forward(self, query, labels=None):
         doc_top_indices = self.retriever.get_relevant_doc(query, k=self.conf.fid.topk)
         inputs = []
         for idx in doc_top_indices:
             inputs.append(f"질문:{query} 문서:{self.datasets['context'][idx]}")
 
+        tokenized_inputs = torch.zeros((self.conf.fid.topk, 1, 1024), dtype=torch.int8)
         concat_input = torch.zeros(0)
-        for input in inputs:
+        for i, input in enumerate(inputs):
             # TODO encoder의 max_length 상수로 사용함
             tokenized_input = self.encoder_tokenizer(
                 input, padding="max_length", max_length=1024, truncation=True, return_tensors="pt"
-            ).to(self.args.device)
+            )
+            tokenized_inputs[i] = tokenized_input["input_ids"].clone().type(torch.int8)
+            tokenized_input = tokenized_input.to(self.args.device)
             self.r_encoder.to("cpu")
             tokenized_input.to("cpu")
             # TODO last_hidden_state를 쓰는게 맞는가?
@@ -110,9 +114,36 @@ class FiD(nn.Module):
             encoder_output = encoder_output[:, 0, :].squeeze()
             concat_input = torch.cat([concat_input, encoder_output.detach().cpu()])
 
-        print(concat_input.size())
-        output = self.r_decoder(
-            self.encoder_tokenizer.bos_token().unsqueeze(), encoder_hidden_states=concat_input.unsqueeze(0)
-        )
+        print(tokenized_inputs.size())
+        print(tokenized_inputs.dtype)
+        print()
+        print(tokenized_inputs[0])
+        if labels is None:
+            decoder_input_ids = shift_tokens_right(
+                tokenized_inputs, self.encoder_tokenizer.pad_token_id, self.reader.config.decoder_start_token_id
+            )
+        else:
+            decoder_input_ids = shift_tokens_right(
+                labels, self.encoder_tokenizer.pad_token_id, self.reader.config.decoder_start_token_id
+            )
+        output = self.r_decoder(input_ids=decoder_input_ids, encoder_hidden_states=concat_input.unsqueeze(0))
         print(output.size())
         print(type(output))
+
+
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    print(shifted_input_ids.size())
+    print(shifted_input_ids.dtype)
+    return shifted_input_ids
