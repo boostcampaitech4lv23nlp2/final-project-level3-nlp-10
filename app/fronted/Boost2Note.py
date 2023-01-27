@@ -27,12 +27,17 @@ with con1:
     with upload_tab:
         file = st.file_uploader("녹음본 파일을 올려주세요.", key="file_uploader", accept_multiple_files=True)
 
-        # file = gallery_dict[file_name]
-        st.write(st.session_state.get("file_uploader"))
+        # st.write(st.session_state.get("file_uploader"))
 
         with st.spinner("변환중입니다..."):
             time.sleep(5)
         st.success("변환 완료")
+        with st.expander("STT 원본 텍스트", expanded=True):
+            st.markdown(
+                """
+                adfsdf
+            """
+            )
         # with st.container():
         #     st.write("This is inside the container")
         # if st.session_state.get("file_uploader") is not None:
