@@ -15,6 +15,8 @@ def get_args():
     arg_parser.add_argument("--option", required=True, choices=["dpr", "fid"], help="어떤 방식의 모델을 돌릴지 선택")
     arg_parser.add_argument("--type", default="train", choices=["train", "eval", "predict"], help="모델을 어떤 형식으로 돌릴지 선택")
 
+    return arg_parser.parse_args()
+
 
 def set_seed(seed):
     torch.manual_seed(seed)

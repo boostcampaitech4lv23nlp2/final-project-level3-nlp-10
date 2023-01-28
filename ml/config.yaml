@@ -1,14 +1,18 @@
 common:
   seed: 12345
+  batch_size: 4
 dpr:
-  emb_save_path: data/MRC_dataset/
+  emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/mrc_dense_embeddings
   encoder_tokenizer: klue/bert-base
   do_eval: True
   eval:
     p_encoder_path: model/saved_models/klue_bert-base/p_encoder
     q_encoder_path: model/saved_models/klue_bert-base/q_encoder
   train:
+    test_sample: -1
     neg_num: 7
+    num_train_epochs: 5
+    learning_rate: 5e-5
 
 fid:
   encoder_tokenizer: klue/bert-base

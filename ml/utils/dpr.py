@@ -35,7 +35,7 @@ class DenseRetrieval:
         self.p_encoder = p_encoder
         self.q_encoder = q_encoder
 
-        self.passages = dataset["context"]
+        self.passages = dataset.context
 
         print(f"Lengths of unique contexts : {len(self.passages)}")
         self.ids = list(range(len(self.passages)))
@@ -82,11 +82,11 @@ class DenseRetrieval:
 
         # 1. In-Batch-Negative 만들기
         # CORPUS를 np.array로 변환해줍니다.
-        corpus = np.array(list(set([example for example in dataset["context"]])))
+        corpus = np.array(list(set(self.passages)))
         p_with_neg = []
 
         cnt = 0
-        pbar = tqdm(dataset["context"], desc="in-batch negative sampling")
+        pbar = tqdm(self.passages, desc="in-batch negative sampling")
         for c in pbar:
             while True:
                 neg_idxs = np.random.randint(len(corpus), size=num_neg)
@@ -101,8 +101,9 @@ class DenseRetrieval:
                     cnt += 1
                     pbar.set_postfix_str(f"failed matching cnt : {cnt}")
         print(f"total {len(p_with_neg)} passages for p_seq")
+
         # 2. (Question, Passage) 데이터셋 만들어주기
-        q_seqs = tokenizer(dataset["question"], padding="max_length", truncation=True, return_tensors="pt")
+        q_seqs = tokenizer(dataset.question, padding="max_length", truncation=True, return_tensors="pt")
         p_seqs = tokenizer(p_with_neg, padding="max_length", truncation=True, return_tensors="pt")
 
         max_len = p_seqs["input_ids"].size(-1)
@@ -127,7 +128,7 @@ class DenseRetrieval:
         self.set_passage_dataloader()
 
     def set_passage_dataloader(self):
-        valid_seqs = self.tokenizer(self.dataset["context"], padding="max_length", truncation=True, return_tensors="pt")
+        valid_seqs = self.tokenizer(self.dataset.context, padding="max_length", truncation=True, return_tensors="pt")
         passage_dataset = TensorDataset(
             valid_seqs["input_ids"], valid_seqs["attention_mask"], valid_seqs["token_type_ids"]
         )
@@ -180,11 +181,6 @@ class DenseRetrieval:
                 for batch in tepoch:
                     self.p_encoder.train()
                     self.q_encoder.train()
-                    print("-" * 50)
-                    print("입력")
-                    print(batch[0].size())
-                    print(batch[3].size())
-                    print()
 
                     p_inputs = {
                         "input_ids": batch[0].view(-1, self.max_len).to(args.device),
@@ -198,22 +194,9 @@ class DenseRetrieval:
                         "token_type_ids": batch[5].to(args.device),
                     }
 
-                    print("p_input")
-                    print(p_inputs["input_ids"].size())
-                    print(q_inputs["input_ids"].size())
-                    print()
-                    """
-                        batch_size:4, query: 15, document: 15, negative_sampling: 4 -> 총 document : 75
-                        1st batch : (1개 query 5개의 document)
-                        15th batch : (1개의 query )
-                    """
-
                     p_outputs = self.p_encoder(**p_inputs)  # (batch_size*(num_neg+1), emb_dim)
                     q_outputs = self.q_encoder(**q_inputs)  # (batch_size*, emb_dim)
 
-                    print("모델 아웃풋")
-                    print(p_outputs.size())
-                    print(q_outputs.size())
                     # Calculate similarity score & loss
                     p_batch_size = int(p_inputs["input_ids"].size()[0] / (self.num_neg + 1))
                     q_batch_size = q_inputs["input_ids"].size()[0]
@@ -247,7 +230,7 @@ class DenseRetrieval:
                     del p_inputs, q_inputs
                 wandb.log({"train/loss_mean": total_loss / len(tepoch)})
 
-    def get_relevant_doc(self, query, k=1, args=None, p_encoder=None, q_encoder=None):
+    def get_relevant_doc(self, tokenized_query, k=1, args=None, p_encoder=None, q_encoder=None):
 
         if args is None:
             args = self.args
@@ -262,10 +245,13 @@ class DenseRetrieval:
             p_encoder.eval()
             q_encoder.eval()
 
+            """
             q_seqs_val = self.tokenizer([query], padding="max_length", truncation=True, return_tensors="pt").to(
                 args.device
             )
-            q_emb = q_encoder(**q_seqs_val).to("cpu")  # (num_query=1, emb_dim)
+            """
+            tokenized_query = tokenized_query.to(args.device)
+            q_emb = q_encoder(**tokenized_query).to("cpu")  # (num_query=1, emb_dim)
 
             """
             p_embs = []

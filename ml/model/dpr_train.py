@@ -1,11 +1,8 @@
-import random
 import sys
 from pprint import pprint
 
-import numpy as np
-import torch
 import wandb
-from datasets import load_dataset
+from data.make_dataset import MRCDataset
 from model.models import BertEncoder
 
 # from sklearn.feature_extraction.text import TfidfVectorizer
@@ -13,7 +10,6 @@ from transformers import AutoTokenizer, TrainingArguments
 from utils.dpr import DenseRetrieval
 
 # model_name = "klue/bert-base"
-seed = 12345
 num_neg = 2
 test_sample = 15
 num_train_epochs = 5
@@ -24,26 +20,23 @@ project_name = "Final_DPR_KLUE"
 entity_name = "boost2end"
 
 
-def train(model_name="klue/bert-base"):
-    train_dataset = load_dataset("klue", "mrc")["train"]
+def train(conf, model_name="klue/bert-base"):
+    # train_dataset = load_dataset("klue", "mrc")["train"]
+    train_dataset = MRCDataset("train")
+    test_sample = conf.dpr.train.test_sample
     if test_sample > 0:
         train_dataset = train_dataset[:test_sample]
 
     wandb.login()
     wandb.init(project=project_name, entity=entity_name, name=f"{model_name}/epoch{num_train_epochs}")
 
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    np.random.seed(seed)
-    random.seed(seed)
-
     args = TrainingArguments(
         output_dir="dense_retireval",
         evaluation_strategy="epoch",
-        learning_rate=learning_rate,
-        per_device_train_batch_size=batch_size,
-        per_device_eval_batch_size=batch_size,
-        num_train_epochs=num_train_epochs,
+        learning_rate=conf.dpr.train.learning_rate,
+        per_device_train_batch_size=conf.common.batch_size,
+        per_device_eval_batch_size=conf.common.batch_size,
+        num_train_epochs=conf.dpr.train.num_train_epochs,
         weight_decay=0.01,
     )
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -51,7 +44,12 @@ def train(model_name="klue/bert-base"):
     q_encoder = BertEncoder.from_pretrained(model_name).to(args.device)
     wandb.watch((p_encoder, q_encoder))
     retriever = DenseRetrieval(
-        args=args, dataset=train_dataset, num_neg=num_neg, tokenizer=tokenizer, p_encoder=p_encoder, q_encoder=q_encoder
+        args=args,
+        dataset=train_dataset,
+        num_neg=conf.dpr.train.neg_num,
+        tokenizer=tokenizer,
+        p_encoder=p_encoder,
+        q_encoder=q_encoder,
     )
     retriever.train()
 
