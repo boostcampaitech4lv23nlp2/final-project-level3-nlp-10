@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 import torch.nn as nn
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BertModel, BertPreTrainedModel
@@ -36,67 +38,47 @@ class DPR(nn.Module):
 
 
 class FiD(nn.Module):
-    def __init__(self, conf, args, q_encoder, p_encoder, reader, passage_dataset, dpr_tokenizer, encoder_tokenizer):
+    def __init__(self, conf, args, reader, passage_dataset, encoder_tokenizer):
         super().__init__()
-
         self.conf = conf
         self.args = args
-        self.q_encoder = q_encoder
-        self.p_encoder = p_encoder
         self.r_encoder = reader.get_encoder()
         self.r_decoder = reader.get_decoder()
         self.reader = reader
         self.r_embedding = list(reader.base_model.children())[0]
         self.encoder_tokenizer = encoder_tokenizer
         self.datasets = passage_dataset
-        self.retriever = DenseRetrieval(
-            args=args,
-            dataset=passage_dataset,
-            num_neg=-1,
-            tokenizer=dpr_tokenizer,
-            p_encoder=p_encoder,
-            q_encoder=q_encoder,
-            emb_save_path=conf.fid.emb_save_path,
-            eval=conf.dpr.do_eval,
-        )
-        self.retriever.set_passage_dataloader()
-        self.retriever.create_passage_embeddings()
-        """
-        if conf.dpr.do_eval:
-            self.dpr = DPR(
-                config,
-                args,
-                q_encoder,
-                p_encoder,
-                passage_dataset,
-                encoder_tokenizer
-            )
-        """
 
     @classmethod
-    def from_path(cls, config, args, q_encoder_path, p_encoder_path, reader_model_path, passage_dataset):
-        q_encoder = BertEncoder.from_pretrained(q_encoder_path)
-        p_encoder = BertEncoder.from_pretrained(p_encoder_path)
-        dpr_tokenizer = AutoTokenizer.from_pretrained(config.fid.encoder_tokenizer)
+    def from_path(cls, config, args, reader_model_path, passage_dataset):
         encoder_tokenizer = AutoTokenizer.from_pretrained(reader_model_path)
         reader = AutoModelForSeq2SeqLM.from_pretrained(reader_model_path)
 
         return cls(
             conf=config,
             args=args,
-            q_encoder=q_encoder,
-            p_encoder=p_encoder,
             reader=reader,
             passage_dataset=passage_dataset,
-            dpr_tokenizer=dpr_tokenizer,
             encoder_tokenizer=encoder_tokenizer,
         )
 
-    def forward(self, query, labels=None):
-        doc_top_indices = self.retriever.get_relevant_doc(query, k=self.conf.fid.topk)
+    def forward(self, input_ids: torch.LongTensor = None, attention_mask: Optional[torch.Tensor] = None, labels=None):
+
+        """
+        args:
+            input_ids
+                (batch_size, seq_len) 형태의 torch.LongTensor
+            attention_mask
+                (batch_size, seq_len) 형태의 torch.Tensor
+                [1, 0]으로 마스킹할지 안할지 구분
+
+        """
+        # doc_top_indices = self.retriever.get_relevant_doc(query, k=self.conf.fid.topk)
+        doc_top_indices = self.retriever.get_relevant_doc(input_ids, k=self.conf.fid.topk)
         inputs = []
         for idx in doc_top_indices:
-            inputs.append(f"질문:{query} 문서:{self.datasets['context'][idx]}")
+            # inputs.append(f"질문:{query} 문서:{self.datasets['context'][idx]}")
+            inputs.append(f"질문:{input_ids} 문서:{self.datasets['context'][idx]}")
 
         tokenized_inputs = torch.zeros((self.conf.fid.topk, 1, 1024), dtype=torch.int8)
         concat_input = torch.zeros(0)

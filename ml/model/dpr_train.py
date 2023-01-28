@@ -9,13 +9,6 @@ from model.models import BertEncoder
 from transformers import AutoTokenizer, TrainingArguments
 from utils.dpr import DenseRetrieval
 
-# model_name = "klue/bert-base"
-num_neg = 2
-test_sample = 15
-num_train_epochs = 5
-learning_rate = 5e-5
-batch_size = 4
-
 project_name = "Final_DPR_KLUE"
 entity_name = "boost2end"
 
@@ -28,7 +21,7 @@ def train(conf, model_name="klue/bert-base"):
         train_dataset = train_dataset[:test_sample]
 
     wandb.login()
-    wandb.init(project=project_name, entity=entity_name, name=f"{model_name}/epoch{num_train_epochs}")
+    wandb.init(project=project_name, entity=entity_name, name=f"{model_name}/epoch{conf.dpr.train.num_train_epochs}")
 
     args = TrainingArguments(
         output_dir="dense_retireval",

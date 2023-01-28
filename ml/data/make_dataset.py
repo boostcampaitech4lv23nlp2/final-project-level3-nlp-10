@@ -17,12 +17,17 @@ class MRCDataset(Dataset):
         self.title = dataset["title"]
         self.answers = dataset["answers"]  # answers = {'answer_start': List[int], 'text': List[text]}
 
-        def __len__(self):
-            return len(self.question)
+    def __len__(self):
+        return len(self.question)
 
-        def __getitem__(self, idx):
-            """
-            Returns:
-                (question, title, context, answer)
-            """
-            return (self.question[idx], self.title[idx], self.context[idx], self.answers[idx]["text"])
+    def __getitem__(self, idx):
+        """
+        Returns:
+            (question, title, context, answer)
+        """
+        return {
+            "question": self.question[idx],
+            "title": self.title[idx],
+            "context": self.context[idx],
+            "answers": self.answers[idx]["text"],
+        }

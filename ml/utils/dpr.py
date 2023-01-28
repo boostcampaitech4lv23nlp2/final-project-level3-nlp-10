@@ -58,7 +58,10 @@ class DenseRetrieval:
             self.p_encoder.to("cuda")
 
             self.p_embedding = torch.zeros(tokenized_embs["input_ids"].size(0), 768)  # Bert_encoder만을 위한 상수!
-            for i in tqdm(range(0, len(tokenized_embs["input_ids"]), self.args.per_device_eval_batch_size)):
+            for i in tqdm(
+                range(0, len(tokenized_embs["input_ids"]), self.args.per_device_eval_batch_size),
+                desc="buliding passage embeddings",
+            ):
                 end = (
                     i + self.args.per_device_eval_batch_size
                     if i + self.args.per_device_eval_batch_size < len(tokenized_embs["input_ids"])
@@ -231,6 +234,18 @@ class DenseRetrieval:
                 wandb.log({"train/loss_mean": total_loss / len(tepoch)})
 
     def get_relevant_doc(self, tokenized_query, k=1, args=None, p_encoder=None, q_encoder=None):
+        """
+        args:
+            tokenized_query : (batch_size, seq_len) 크기의 tokenized 된 query (BatchEncoding)
+            k : topk
+            args : arguments
+            p_encoder : BertEncoder로 구성된 passage_encoder
+            q_encoder : BertEncoder로 구성된 query_encoder
+
+        return
+            (batch_size, topk) 형태의 torch.Tensor
+
+        """
 
         if args is None:
             args = self.args
@@ -241,6 +256,7 @@ class DenseRetrieval:
         if q_encoder is None:
             q_encoder = self.q_encoder
 
+        q_encoder.to(args.device)
         with torch.no_grad():
             p_encoder.eval()
             q_encoder.eval()
@@ -265,7 +281,10 @@ class DenseRetrieval:
         p_embs = torch.stack(p_embs, dim=0).view(len(self.passage_dataloader.dataset), -1)  # (num_passage, emb_dim)
         dot_prod_scores = torch.matmul(q_emb, torch.transpose(p_embs, 0, 1))
         """
-
-        dot_prod_scores = torch.matmul(q_emb, torch.transpose(self.p_embedding, 0, 1))
-        rank = torch.argsort(dot_prod_scores, dim=1, descending=True).squeeze()
-        return rank[:k]
+        dot_prod_scores = torch.matmul(
+            q_emb, torch.transpose(self.p_embedding, 0, 1)
+        )  # dot_proed_socres: (batch_size, passage전체 개수)
+        rank = torch.argsort(dot_prod_scores, dim=-1, descending=True).squeeze()  # rank: (batch_size, passage 전체 개수)
+        print(type(rank))
+        print(type(tokenized_query))
+        return rank[:, :k]
