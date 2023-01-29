@@ -6,11 +6,11 @@ wandb:
 
 train: 
   output_dir: "./data/saved"
-  learning_rate: 4e-5
+  learning_rate: 3e-5
   per_device_train_batch_size: 4
   per_device_eval_batch_size: 4
-  num_train_epochs: 5
-  weight_decay: 0.01
+  num_train_epochs: 10
+  weight_decay: 0.001
 
 path:
   model_name_or_path: "klue/bert-base"
@@ -22,4 +22,4 @@ path:
   wandb_dir: "./data/wandb_checkpoints"
 
 others:
-  seed: 3431
+  seed: 42

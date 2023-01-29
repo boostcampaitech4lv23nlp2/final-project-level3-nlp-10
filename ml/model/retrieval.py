@@ -350,7 +350,8 @@ class DenseRetrieval:
         else:
             self.val_dataloader, self.train_passage_dataloader = None, None
         self.set_optimziers(conf)
-        self.get_dense_embedding(reset=True)
+        # self.get_dense_embedding(reset=True)
+        # self.indexer_path = self.build_faiss()
 
     def prepare_in_batch_negative(
         self, query_dataset, context_dataset, tokenizer=None, is_bm25: bool = False, is_train=False
@@ -409,6 +410,7 @@ class DenseRetrieval:
 
             emb = encoder(**inputs).pooler_output.to("cpu")
             embs.append(emb)
+            del inputs
         return embs
 
     def save(self, filename="temp_"):
@@ -478,8 +480,8 @@ class DenseRetrieval:
         torch.cuda.empty_cache()
 
         for epoch in range(int(self.conf.num_train_epochs)):
-            if self.val_dataloader:
-                self.eval(epoch)
+            # if self.val_dataloader:
+            # self.eval(epoch)
             with tqdm(self.train_dataloader, unit="batch", desc=f"{epoch}th Train: ") as tepoch:
                 for batch in tepoch:
 
@@ -522,7 +524,6 @@ class DenseRetrieval:
                     del p_inputs, q_inputs, batch
 
             if epoch % self.save_period == 0:
-
                 filename = f"epoch_{epoch}"
                 self.save(filename)
 
@@ -564,7 +565,8 @@ class DenseRetrieval:
                 self.q_encoder.zero_grad()
                 torch.cuda.empty_cache()
                 del p_inputs, q_inputs
-            wandb.log({"Eval loss mean": sum(mean_loss) / len(mean_loss)})
+            if self.is_monitoring:
+                wandb.log({"Eval loss mean": sum(mean_loss) / len(mean_loss)})
 
     def get_dense_embedding(
         self, p_encoder=None, passage_dataloader=None, pickle_name="dense_embedding.bin", reset=False
@@ -596,6 +598,41 @@ class DenseRetrieval:
             with open(emd_path, "wb") as file:
                 pickle.dump(self.p_embedding, file)
             print("Embedding pickle saved.")
+
+    def build_faiss(self, num_clusters=64) -> NoReturn:
+
+        """
+        Summary:
+            속성으로 저장되어 있는 Passage Embedding을
+            Faiss indexer에 fitting 시켜놓습니다.
+            이렇게 저장된 indexer는 `get_relevant_doc`에서 유사도를 계산하는데 사용됩니다.
+        Note:
+            Faiss는 Build하는데 시간이 오래 걸리기 때문에,
+            매번 새롭게 build하는 것은 비효율적입니다.
+            그렇기 때문에 build된 index 파일을 저정하고 다음에 사용할 때 불러옵니다.
+            다만 이 index 파일은 용량이 1.4Gb+ 이기 때문에 여러 num_clusters로 시험해보고
+            제일 적절한 것을 제외하고 모두 삭제하는 것을 권장합니다.
+        """
+
+        indexer_name = f"dense_faiss_clusters{num_clusters}.faiss"
+        indexer_path = os.path.join(self.data_path, indexer_name)
+        if os.path.isfile(indexer_path):
+            print("Load Saved Faiss Indexer.")
+            self.indexer = faiss.read_index(indexer_path)
+
+        else:
+            p_emb = np.array(self.p_embedding)
+            emb_dim = p_emb.shape[-1]
+
+            num_clusters = num_clusters
+            quantizer = faiss.IndexFlatL2(emb_dim)
+
+            self.indexer = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, num_clusters, faiss.METRIC_L2)
+            self.indexer.train(p_emb)
+            self.indexer.add(p_emb)
+            faiss.write_index(self.indexer, indexer_path)
+            print("Faiss Indexer Saved.")
+        return indexer_path
 
     def get_relevant_doc(
         self, queries: List, k: Optional[int] = 1, p_encoder=None, q_encoder=None, passage_dataloader=None, reset=False
