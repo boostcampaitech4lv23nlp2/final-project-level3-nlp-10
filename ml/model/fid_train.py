@@ -64,6 +64,7 @@ def fid_train(conf):
         total_loss = 0
 
         # Train
+        model.to(args.device)
         for data in tqdm(train_dataloader, desc=f"train {epoch} epoch"):
             optimizer.zero_grad()
             questions = [batch["question"] for batch in data]
@@ -111,6 +112,7 @@ def fid_train(conf):
 
         # Validation
         valid_total_loss = 0
+        model.to("cpu")
         for data in tqdm(valid_dataloader, desc=f"valid {epoch} epoch"):
             questions = [batch["question"] for batch in data]
             answers = [batch["answers"][0] for batch in data]
@@ -144,9 +146,9 @@ def fid_train(conf):
                     )
                 )
 
-            input_ids = torch.stack([item["input_ids"] for item in inputs], dim=0).to(args.device)
-            attention_mask = torch.stack([item["attention_mask"] for item in inputs], dim=0).to(args.device)
-            labels = torch.stack([item["input_ids"] for item in labels]).to(args.device)
+            input_ids = torch.stack([item["input_ids"] for item in inputs], dim=0).to("cpu")
+            attention_mask = torch.stack([item["attention_mask"] for item in inputs], dim=0).to("cpu")
+            labels = torch.stack([item["input_ids"] for item in labels]).to("cpu")
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
             wandb.log({"valid_loss": outputs["loss_fn"]})
             valid_total_loss += outputs["loss_fn"]

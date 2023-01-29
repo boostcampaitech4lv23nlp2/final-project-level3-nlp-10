@@ -60,7 +60,7 @@ class FiD(nn.Module):
             encoder_tokenizer=encoder_tokenizer,
         )
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor):
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor = None):
         """
 
         Args:
@@ -78,6 +78,7 @@ class FiD(nn.Module):
                     (batch_size, max_seq_len, hidden_dim) 크기의 tensor
             }
         """
+
         passage_length = input_ids.size(-1)
         input_ids = input_ids.view(self.conf.common.batch_size * self.conf.fid.topk, -1)
         attention_mask = attention_mask.view(self.conf.common.batch_size * self.conf.fid.topk, -1)
@@ -88,15 +89,6 @@ class FiD(nn.Module):
         ) + encoder_outputs[1:]
         # encoder_outptus : (batch_size, topk*seq_max_len, hidden_dim)
         encoder_outputs = encoder_outputs[0]
-        """encoder_output(dataclass)
-            last_hidden_state : FloatTensor
-                (batch_size, max_sequence_length, hidden_size) 형태의 마지막 layer의 output
-            hidden_states : tuple(FloatTensor)
-                embedding_layer + 모든 layer의 output을 (batch_size, sequence_length, hidden_size)형태로 제공
-            attentions : tuple(FloatTensor)
-                attention softmax 이후의 어텐션 가중치들.
-                self-attention :head들의 가중치 평균 계산에 사용
-        """
         # decoder_input_ids : (batch_size, topk, seq_max_len)
         decoder_input_ids = shift_tokens_right(
             labels, self.encoder_tokenizer.pad_token_id, self.reader.config.decoder_start_token_id
@@ -117,11 +109,7 @@ class FiD(nn.Module):
             loss_fn = CrossEntropyLoss()
             masked_lm_loss = loss_fn(lm_logits.view(-1, self.reader.config.vocab_size), labels.view(-1))
 
-        return {
-            "logits": lm_logits,
-            "loss_fn": masked_lm_loss,
-            "last_hidden_state": decoder_output["last_hidden_state"],
-        }
+        return {"logits": lm_logits, "loss_fn": masked_lm_loss, "last_hidden_state": decoder_output}
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
