@@ -3,7 +3,7 @@ common:
   batch_size: 4
 dpr:
   #emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/mrc_dense_embeddings/validation
-  emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/MRC_dataset
+  emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/mrc_dense_embeddings/train
   encoder_tokenizer: klue/bert-base
   do_eval: True
   eval:

@@ -1,7 +1,6 @@
-from typing import Optional
-
 import torch
 import torch.nn as nn
+from torch.nn import CrossEntropyLoss
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BertModel, BertPreTrainedModel
 from utils.dpr import DenseRetrieval
 
@@ -45,7 +44,6 @@ class FiD(nn.Module):
         self.r_encoder = reader.get_encoder()
         self.r_decoder = reader.get_decoder()
         self.reader = reader
-        self.r_embedding = list(reader.base_model.children())[0]
         self.encoder_tokenizer = encoder_tokenizer
         self.datasets = passage_dataset
 
@@ -62,55 +60,55 @@ class FiD(nn.Module):
             encoder_tokenizer=encoder_tokenizer,
         )
 
-    def forward(self, input_ids: torch.LongTensor = None, attention_mask: Optional[torch.Tensor] = None, labels=None):
-
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, label: torch.Tensor):
         """
-        args:
-            input_ids
-                (batch_size, seq_len) 형태의 torch.LongTensor
-            attention_mask
-                (batch_size, seq_len) 형태의 torch.Tensor
-                [1, 0]으로 마스킹할지 안할지 구분
 
+        Args:
+            input_ids (torch.Tensor): (topk, seq_max_len) 형태의 Tensor
+            attention_mask (torch.Tensor): (topk, seq_max_len) 형태의 Tensor
+            label (torch.Tensor): (1, seq_max_len) 형태의 summarization Tensor
+
+        Return:
+            {
+                logit (torch.Tensor):
+                    (batch_size, max_seq_len, vocab_size) 크기의 logit
+                loss_fn:
+                    logit과 label간의 loss_fn
+                last_hidden_state (torch.Tensor):
+                    (batch_size, max_seq_len, hidden_dim) 크기의 tensor
+            }
         """
-        # doc_top_indices = self.retriever.get_relevant_doc(query, k=self.conf.fid.topk)
-        doc_top_indices = self.retriever.get_relevant_doc(input_ids, k=self.conf.fid.topk)
-        inputs = []
-        for idx in doc_top_indices:
-            # inputs.append(f"질문:{query} 문서:{self.datasets['context'][idx]}")
-            inputs.append(f"질문:{input_ids} 문서:{self.datasets['context'][idx]}")
+        encoder_output = self.r_encoder(input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
+        """encoder_output(dataclass)
+            last_hidden_state : FloatTensor
+                (batch_size, max_sequence_length, hidden_size) 형태의 마지막 layer의 output
+            hidden_states : tuple(FloatTensor)
+                embedding_layer + 모든 layer의 output을 (batch_size, sequence_length, hidden_size)형태로 제공
+            attentions : tuple(FloatTensor)
+                attention softmax 이후의 어텐션 가중치들.
+                self-attention :head들의 가중치 평균 계산에 사용
+        """
+        decoder_input_ids = shift_tokens_right(
+            label, self.encoder_tokenizer.pad_token_id, self.reader.config.decoder_start_token_id
+        )
+        # output last hidden state size애러 해결중
+        decoder_output = self.r_decoder(
+            input_ids=decoder_input_ids, encoder_hidden_states=encoder_output.view(1, -1, encoder_output.size(-1))
+        )
 
-        tokenized_inputs = torch.zeros((self.conf.fid.topk, 1, 1024), dtype=torch.int8)
-        concat_input = torch.zeros(0)
-        for i, input in enumerate(inputs):
-            # TODO encoder의 max_length 상수로 사용함
-            tokenized_input = self.encoder_tokenizer(
-                input, padding="max_length", max_length=1024, truncation=True, return_tensors="pt"
-            )
-            tokenized_inputs[i] = tokenized_input["input_ids"].clone().type(torch.int8)
-            tokenized_input = tokenized_input.to(self.args.device)
-            self.r_encoder.to("cpu")
-            tokenized_input.to("cpu")
-            # TODO last_hidden_state를 쓰는게 맞는가?
-            encoder_output = self.r_encoder(tokenized_input["input_ids"].unsqueeze(0)).last_hidden_state
-            encoder_output = encoder_output[:, 0, :].squeeze()
-            concat_input = torch.cat([concat_input, encoder_output.detach().cpu()])
+        lm_logits = self.reader.lm_head(decoder_output["last_hidden_state"])
+        lm_logits = lm_logits + self.reader.final_logits_bias.to(lm_logits.device)
 
-        print(tokenized_inputs.size())
-        print(tokenized_inputs.dtype)
-        print()
-        print(tokenized_inputs[0])
-        if labels is None:
-            decoder_input_ids = shift_tokens_right(
-                tokenized_inputs, self.encoder_tokenizer.pad_token_id, self.reader.config.decoder_start_token_id
-            )
-        else:
-            decoder_input_ids = shift_tokens_right(
-                labels, self.encoder_tokenizer.pad_token_id, self.reader.config.decoder_start_token_id
-            )
-        output = self.r_decoder(input_ids=decoder_input_ids, encoder_hidden_states=concat_input.unsqueeze(0))
-        print(output.size())
-        print(type(output))
+        masked_lm_loss = None
+        if label is not None:
+            loss_fn = CrossEntropyLoss()
+            masked_lm_loss = loss_fn(lm_logits.view(-1, self.reader.config.vocab_size), label.view(-1))
+
+        return {
+            "logits": lm_logits,
+            "loss_fn": masked_lm_loss,
+            "last_hidden_state": decoder_output["last_hidden_state"],
+        }
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
@@ -126,6 +124,4 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
-    print(shifted_input_ids.size())
-    print(shifted_input_ids.dtype)
     return shifted_input_ids

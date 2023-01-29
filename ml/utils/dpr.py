@@ -76,6 +76,17 @@ class DenseRetrieval:
                 pickle.dump(self.p_embedding, file)
             print("embedding pickle saved.")
 
+    def get_passage_by_indices(self, top_docs):
+        """
+
+        Args:
+            top_docs (torch.Tensor): (batch_size, topk) 형태의 tensor
+
+        Returns:
+            List[List[str]]: (batch_size, topk) 형태의
+        """
+        return [[self.passages[idx] for idx in indices] for indices in top_docs]
+
     def prepare_in_batch_negative(self, dataset=None, num_neg=2, tokenizer=None):
         if dataset is None:
             dataset = self.dataset
@@ -285,6 +296,4 @@ class DenseRetrieval:
             q_emb, torch.transpose(self.p_embedding, 0, 1)
         )  # dot_proed_socres: (batch_size, passage전체 개수)
         rank = torch.argsort(dot_prod_scores, dim=-1, descending=True).squeeze()  # rank: (batch_size, passage 전체 개수)
-        print(type(rank))
-        print(type(tokenized_query))
         return rank[:, :k]
