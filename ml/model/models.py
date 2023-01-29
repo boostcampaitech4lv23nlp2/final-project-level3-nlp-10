@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BertModel, BertPreTrainedModel
-from utils.dpr import DenseRetrieval
 
 
 class BertEncoder(BertPreTrainedModel):
@@ -18,22 +17,6 @@ class BertEncoder(BertPreTrainedModel):
 
         pooled_output = outputs[1]
         return pooled_output
-
-
-class DPR(nn.Module):
-    def __init__(self, conf, args, q_encoder, p_encoder, passage_dataset, encoder_tokenizer):
-        self.conf = conf
-        self.args = args
-        self.q_encoder = q_encoder
-        self.p_encoder = p_encoder
-        self.retriever = DenseRetrieval(
-            args, passage_dataset, encoder_tokenizer, p_encoder, q_encoder, conf.emb_save_path, conf.dpr.do_eval
-        )
-        if conf.dpr.do_eval:
-            self.retriever.set_passage_dataloader()
-            self.retriever.create_passage_embeddings()
-
-    # def forward(self, query, topk):
 
 
 class FiD(nn.Module):

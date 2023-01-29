@@ -8,8 +8,8 @@ wandb:
   project_name: Final_FiD_trial
   entity_name: boost2end
 dpr:
-  #emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/mrc_dense_embeddings/validation
-  emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/mrc_dense_embeddings/train
+  emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/
+  #emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/mrc_dense_embeddings/train
   encoder_tokenizer: klue/bert-base
   do_eval: True
   eval:
@@ -21,7 +21,6 @@ dpr:
 
 fid:
   encoder_tokenizer: klue/bert-base
-  emb_save_path: data/MRC_dataset/
   p_encoder_path: model/saved_models/klue_bert-base/p_encoder
   q_encoder_path: model/saved_models/klue_bert-base/q_encoder
   reader_model: alaggung/bart-r3f

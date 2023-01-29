@@ -36,7 +36,7 @@ class MRCDataset(Dataset):
 
 
 class ProjectDataset(Dataset):
-    def __init__(self, dataset_path: str, data_type: str = "train"):
+    def __init__(self, dataset_path: str, data_type: str = "train", sep_token: str = "[SEP]"):
 
         """
         args:
@@ -45,6 +45,7 @@ class ProjectDataset(Dataset):
                 해당 path 안에는 train_query.pickle, valid_query.pickle이 있어야 함
             data_type
                 dataset의 타입. ['train', 'valid']
+            sep_token
         """
         assert data_type in ["train", "valid"], "지원하지 않는 datatype"
         pickle_path = f"{dataset_path}/{data_type}_query.pickle"
@@ -55,6 +56,7 @@ class ProjectDataset(Dataset):
         self.answers = dataset[
             "annotation"
         ].values.tolist()  # answers = {'answer_start': List[int], 'text': List[text]}
+        self.sep_token = sep_token
 
     def __len__(self):
         return len(self.question)
@@ -62,11 +64,11 @@ class ProjectDataset(Dataset):
     def __getitem__(self, idx):
         """
         Returns:
-            (question, title, context, answer)
+            (question, context, answer)
         """
+        question = self.sep_token.join(self.question[idx])
         return {
-            "question": self.question[idx],
-            "title": self.title[idx],
+            "question": question,
             "context": self.context[idx],
-            "answers": self.answers[idx]["text"],
+            "answer": self.answers[idx]["summary1"],
         }
