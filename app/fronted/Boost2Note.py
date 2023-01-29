@@ -2,7 +2,11 @@ import sys
 import time
 from collections import deque
 
+import requests
 import streamlit as st
+import streamlit_nested_layout
+
+__all__ = ["streamlit_nested_layout"]
 
 sys.path.insert(0, ".")
 queue = deque()
@@ -13,31 +17,71 @@ st.set_page_config(layout="wide")
 #   App
 # =======
 
+
+def wait_msg(msg, wait=3, type_="warning"):
+    placeholder = st.empty()
+    placeholder.warning(msg, icon="🤖")
+    time.sleep(wait)
+    placeholder.empty()
+
+
+if "filename" not in st.session_state:
+    st.session_state["filename"] = ""
+if "success" not in st.session_state:
+    st.session_state["success"] = False
+
+
+# TODO: 녹음본을 저장할까요? 버튼 맨 아래에 저장하자.
+empty1, con1, empty2 = st.columns([0.1, 1.0, 0.1])
+empty1, con3, empty2 = st.columns([0.1, 1.0, 0.1])
+
+
 with st.sidebar:
     st.title("회의 관리는 Boost2Note")
     st.caption("Made by Boost2End")
     st.markdown("---")
 
-empty1, con1, empty2 = st.columns([0.1, 1.0, 0.1])
-_, con_summary, option, _ = st.columns([0.1, 0.7, 0.2, 0.1])
-empty1, con3, empty2 = st.columns([0.1, 1.0, 0.1])
-
 with con1:
-    upload_tab, record_tab = st.tabs(["녹음본 업로드", "녹음하기"])
+    upload_tab, record_tab = st.tabs(["녹음본 업로드", "..."])
+
     with upload_tab:
-        file = st.file_uploader("녹음본 파일을 올려주세요.", key="file_uploader", accept_multiple_files=True)
+        uploaded_file = st.file_uploader(
+            "녹음본 파일을 올려주세요.", key="file_uploader", accept_multiple_files=False, type=["wav", "mp4", "mp3", "png"]
+        )
+        print(uploaded_file)
+        print(st.session_state.filename)
+        if uploaded_file and uploaded_file.name != st.session_state["filename"]:
+            msg = "변환 중입니다.."
+            wait_msg(msg, 3, msg)
 
-        # st.write(st.session_state.get("file_uploader"))
+            # st.write("slider", slider_val, "checkbox", checkbox_val)
+            # TODO: 올리면 save 되어야 함.
+            st.write(uploaded_file.name)
+            st.session_state["filename"] = uploaded_file.name
+            st.session_state["success"] = st.success("변환 완료")
 
-        with st.spinner("변환중입니다..."):
-            time.sleep(5)
-        st.success("변환 완료")
-        with st.expander("STT 원본 텍스트", expanded=True):
-            st.markdown(
-                """
-                adfsdf
-            """
-            )
+            sound_bytes = uploaded_file.getvalue()
+            files = [("files", (uploaded_file.name, sound_bytes, uploaded_file.type))]
+            response = requests.post("http://localhost:8000/stt", files=files)
+            label = response.json()
+            st.write(f"label is {label}")
+
+        if st.session_state["success"]:
+            with st.expander("STT 원본 텍스트", expanded=True):
+                st.markdown(
+                    """
+                            adfsdf
+                        """
+                )
+                _, _, _, con5, con6 = st.columns([0.2, 0.2, 0.1, 0.3, 0.2])
+                with con5:
+                    save = st.button("원본 텍스트 저장", key="save_txt")
+                    if save:
+                        response = requests.post("http://localhost:8000/save", files=["save"])
+                        label = response.json()
+                        st.write(f"label is {label}")
+                with con6:
+                    st.button("초기화", key="reset_txt")
         # with st.container():
         #     st.write("This is inside the container")
         # if st.session_state.get("file_uploader") is not None:
@@ -57,6 +101,7 @@ with con1:
         #     st.warning("To use the file uploader, remove the image URL first.")
     st.markdown("---")
 with con3:
+
     options = st.multiselect("주요 키워드", list(queue), ["nnew"])
     for i in range(3):
         with st.expander("? 키워드 요약", expanded=True):
