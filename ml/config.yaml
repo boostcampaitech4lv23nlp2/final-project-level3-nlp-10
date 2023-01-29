@@ -1,6 +1,12 @@
 common:
   seed: 12345
   batch_size: 4
+  learning_rate: 5e-5
+  num_train_epochs: 5
+  dataset_path: /opt/ml/final-project-level3-nlp-10/ml/data/project_dataset
+wandb:
+  project_name: Final_FiD_trial
+  entity_name: boost2end
 dpr:
   #emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/mrc_dense_embeddings/validation
   emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/mrc_dense_embeddings/train
@@ -12,8 +18,6 @@ dpr:
   train:
     test_sample: -1
     neg_num: 7
-    num_train_epochs: 5
-    learning_rate: 5e-5
 
 fid:
   encoder_tokenizer: klue/bert-base
