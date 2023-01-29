@@ -60,13 +60,13 @@ class FiD(nn.Module):
             encoder_tokenizer=encoder_tokenizer,
         )
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, label: torch.Tensor):
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor):
         """
 
         Args:
-            input_ids (torch.Tensor): (topk, seq_max_len) 형태의 Tensor
-            attention_mask (torch.Tensor): (topk, seq_max_len) 형태의 Tensor
-            label (torch.Tensor): (1, seq_max_len) 형태의 summarization Tensor
+            input_ids (torch.Tensor): (batch_size, topk, seq_max_len) 형태의 Tensor
+            attention_mask (torch.Tensor): (batch_size, topk, seq_max_len) 형태의 Tensor
+            labels (torch.Tensor): (batch_size, 1, seq_max_len) 형태의 summarization Tensor
 
         Return:
             {
@@ -78,7 +78,16 @@ class FiD(nn.Module):
                     (batch_size, max_seq_len, hidden_dim) 크기의 tensor
             }
         """
-        encoder_output = self.r_encoder(input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
+        passage_length = input_ids.size(-1)
+        input_ids = input_ids.view(self.conf.common.batch_size * self.conf.fid.topk, -1)
+        attention_mask = attention_mask.view(self.conf.common.batch_size * self.conf.fid.topk, -1)
+        encoder_outputs = self.r_encoder(input_ids=input_ids, attention_mask=attention_mask)
+        # facebook github에서 모든 output들을 더했음
+        encoder_outputs = (
+            encoder_outputs[0].view(self.conf.common.batch_size, self.conf.fid.topk * passage_length, -1),
+        ) + encoder_outputs[1:]
+        # encoder_outptus : (batch_size, topk*seq_max_len, hidden_dim)
+        encoder_outputs = encoder_outputs[0]
         """encoder_output(dataclass)
             last_hidden_state : FloatTensor
                 (batch_size, max_sequence_length, hidden_size) 형태의 마지막 layer의 output
@@ -88,21 +97,25 @@ class FiD(nn.Module):
                 attention softmax 이후의 어텐션 가중치들.
                 self-attention :head들의 가중치 평균 계산에 사용
         """
+        # decoder_input_ids : (batch_size, topk, seq_max_len)
         decoder_input_ids = shift_tokens_right(
-            label, self.encoder_tokenizer.pad_token_id, self.reader.config.decoder_start_token_id
+            labels, self.encoder_tokenizer.pad_token_id, self.reader.config.decoder_start_token_id
         )
-        # output last hidden state size애러 해결중
+        # decoder_output : (batch_size, seq_max_len, hidden_dim)
         decoder_output = self.r_decoder(
-            input_ids=decoder_input_ids, encoder_hidden_states=encoder_output.view(1, -1, encoder_output.size(-1))
-        )
+            input_ids=decoder_input_ids.view(-1, decoder_input_ids.size(-1)),
+            encoder_hidden_states=encoder_outputs.view(self.conf.common.batch_size, -1, encoder_outputs.size(-1)),
+        )["last_hidden_state"]
+        lm_logits = self.reader.lm_head(decoder_output)
 
-        lm_logits = self.reader.lm_head(decoder_output["last_hidden_state"])
+        # TODO facebook에서는 안하고 BartConditionalGenerate에서는 함
+        # lm_logits: (batch_size, seq_max_len, vocab_size)
         lm_logits = lm_logits + self.reader.final_logits_bias.to(lm_logits.device)
 
         masked_lm_loss = None
-        if label is not None:
+        if labels is not None:
             loss_fn = CrossEntropyLoss()
-            masked_lm_loss = loss_fn(lm_logits.view(-1, self.reader.config.vocab_size), label.view(-1))
+            masked_lm_loss = loss_fn(lm_logits.view(-1, self.reader.config.vocab_size), labels.view(-1))
 
         return {
             "logits": lm_logits,
@@ -116,8 +129,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     Shift input ids one token to the right.
     """
     shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-    shifted_input_ids[:, 0] = decoder_start_token_id
+    shifted_input_ids[:, :, 1:] = input_ids[:, :, :-1].clone()
+    shifted_input_ids[:, :, 0] = decoder_start_token_id
 
     if pad_token_id is None:
         raise ValueError("self.model.config.pad_token_id has to be defined.")
