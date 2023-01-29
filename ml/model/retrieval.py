@@ -16,7 +16,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from torch import Tensor
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
-from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import AdamW, get_cosine_schedule_with_warmup  # , get_linear_schedule_with_warmup
 from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.models.bert.modeling_bert import BertModel, BertPreTrainedModel
@@ -301,8 +301,10 @@ class DenseRetrieval:
         q_encoder,
         save_period: int = 1,
         eval_function=None,
-        train_dataset=None,
-        val_dataset=None,
+        train_query_dataset=None,
+        train_context_dataset=None,
+        val_query_dataset=None,
+        val_context_dataset=None,
         data_path="./data/ckpt",
         is_bm25=False,
         is_monitoring=False,
@@ -310,8 +312,11 @@ class DenseRetrieval:
         self.conf = conf
         self.device = self.conf.device
 
-        self.train_dataset = train_dataset
-        self.val_dataset = val_dataset
+        self.train_query_dataset = train_query_dataset
+        self.train_context_dataset = train_context_dataset
+        self.val_query_dataset = val_query_dataset
+        self.val_context_dataset = val_context_dataset
+
         self.num_neg = num_neg
 
         self.tokenizer = tokenizer
@@ -326,51 +331,54 @@ class DenseRetrieval:
             wandb.init(project="dpr", entity="boost2end")
             wandb.watch((self.q_encoder, self.p_encoder), criterion=self.loss, log="all", log_freq=10)
 
-        if self.train_dataset:  # for only train
+        if self.train_query_dataset and self.train_context_dataset:  # for only train
             self.train_dataloader, self.train_passage_dataloader = self.prepare_in_batch_negative(
-                self.train_dataset, is_bm25=is_bm25, is_train=True
+                query_dataset=self.train_query_dataset,
+                context_dataset=self.train_context_dataset,
+                is_bm25=is_bm25,
+                is_train=True,
             )
         else:
             self.train_dataloader, self.train_passage_dataloader = None, None
-        if self.val_dataset:  # for only test(or validation)
+        if self.val_query_dataset and self.val_context_dataset:  # for only test(or validation)
             self.val_dataloader, self.val_passage_dataloader = self.prepare_in_batch_negative(
-                self.val_dataset, is_bm25=is_bm25, is_train=False
+                query_dataset=self.val_query_dataset,
+                context_dataset=self.val_context_dataset,
+                is_bm25=is_bm25,
+                is_train=False,
             )
         else:
             self.val_dataloader, self.train_passage_dataloader = None, None
         self.set_optimziers(conf)
+        self.get_dense_embedding(reset=True)
 
-    def prepare_in_batch_negative(self, dataset, tokenizer=None, is_bm25: bool = False, is_train=False):
+    def prepare_in_batch_negative(
+        self, query_dataset, context_dataset, tokenizer=None, is_bm25: bool = False, is_train=False
+    ):
 
         if tokenizer is None:
             tokenizer = self.tokenizer
 
-        if is_train:
-            num_neg = self.num_neg
-        else:
-            num_neg = 0
-
-        corpus = np.array(list(set([example for example in dataset["context"]])))
+        corpus = np.array(list(set([example for example in context_dataset])))
         p_with_neg = []
 
-        for c in tqdm(dataset["context"], desc="in_batch_negative"):
+        for c in tqdm(context_dataset, desc="in_batch_negative"):
             while True:
-                neg_idxs = np.random.randint(len(corpus), size=num_neg)
+                neg_idxs = np.random.randint(len(corpus), size=self.num_neg)
                 if c not in corpus[neg_idxs]:
                     p_neg = corpus[neg_idxs]
 
                     p_with_neg.append(c)
                     p_with_neg.extend(p_neg)
                     break
-
-        q_seqs = tokenizer(dataset["question"], padding="max_length", truncation=True, return_tensors="pt")
+        q_seqs = tokenizer(query_dataset, padding="max_length", truncation=True, return_tensors="pt")
         p_seqs = tokenizer(p_with_neg, padding="max_length", truncation=True, return_tensors="pt")
 
         max_len = p_seqs["input_ids"].size(-1)
 
-        p_seqs["input_ids"] = p_seqs["input_ids"].view(-1, num_neg + 1, max_len)
-        p_seqs["attention_mask"] = p_seqs["attention_mask"].view(-1, num_neg + 1, max_len)
-        p_seqs["token_type_ids"] = p_seqs["token_type_ids"].view(-1, num_neg + 1, max_len)
+        p_seqs["input_ids"] = p_seqs["input_ids"].view(-1, self.num_neg + 1, max_len)
+        p_seqs["attention_mask"] = p_seqs["attention_mask"].view(-1, self.num_neg + 1, max_len)
+        p_seqs["token_type_ids"] = p_seqs["token_type_ids"].view(-1, self.num_neg + 1, max_len)
 
         _dataset = TensorDataset(
             p_seqs["input_ids"],
@@ -385,7 +393,7 @@ class DenseRetrieval:
 
         dataloader = DataLoader(_dataset, shuffle=is_train, batch_size=batch_size)
 
-        valid_seqs = tokenizer(dataset["context"], padding="max_length", truncation=True, return_tensors="pt")
+        valid_seqs = tokenizer(context_dataset, padding="max_length", truncation=True, return_tensors="pt")
         passage_dataset = TensorDataset(
             valid_seqs["input_ids"], valid_seqs["attention_mask"], valid_seqs["token_type_ids"]
         )
@@ -438,20 +446,17 @@ class DenseRetrieval:
         ]
         self.optimizer = AdamW(optimizer_grouped_parameters, lr=conf.learning_rate, eps=conf.adam_epsilon)
         t_total = len(self.train_dataloader) // self.conf.gradient_accumulation_steps * self.conf.num_train_epochs
-        self.scheduler = get_linear_schedule_with_warmup(
+        self.scheduler = get_cosine_schedule_with_warmup(
             self.optimizer, num_warmup_steps=self.conf.warmup_steps, num_training_steps=t_total
         )
 
     def reshape_batch_inputs(self, batch, is_train=True):
-        if is_train:
-            num_neg = self.num_neg
-        else:
-            num_neg = 0
         batch_size = batch[0].shape[0]
+
         p_inputs = {
-            "input_ids": batch[0].reshape(batch_size * (num_neg + 1), -1).to(self.device),
-            "attention_mask": batch[1].reshape(batch_size * (num_neg + 1), -1).to(self.device),
-            "token_type_ids": batch[2].reshape(batch_size * (num_neg + 1), -1).to(self.device),
+            "input_ids": batch[0].reshape(batch_size * (self.num_neg + 1), -1).to(self.device),
+            "attention_mask": batch[1].reshape(batch_size * (self.num_neg + 1), -1).to(self.device),
+            "token_type_ids": batch[2].reshape(batch_size * (self.num_neg + 1), -1).to(self.device),
         }
 
         q_inputs = {
@@ -473,7 +478,9 @@ class DenseRetrieval:
         torch.cuda.empty_cache()
 
         for epoch in range(int(self.conf.num_train_epochs)):
-            with tqdm(self.train_dataloader, unit="batch", desc="Train: ") as tepoch:
+            if self.val_dataloader:
+                self.eval(epoch)
+            with tqdm(self.train_dataloader, unit="batch", desc=f"{epoch}th Train: ") as tepoch:
                 for batch in tepoch:
 
                     self.p_encoder.train()
@@ -497,7 +504,6 @@ class DenseRetrieval:
                     ).squeeze()  # (batch_size, num_neg + 1)
                     sim_scores = sim_scores.view(batch_size, -1)
                     sim_scores = F.log_softmax(sim_scores, dim=1)
-
                     loss = self.loss(sim_scores, targets)
                     tepoch.set_postfix(loss=f"{str(loss.item())}")
 
@@ -513,11 +519,10 @@ class DenseRetrieval:
                     if self.is_monitoring:
                         wandb.log({"epoch": epoch, "Train loss": loss, "lr": self.optimizer.param_groups[0]["lr"]})
                     torch.cuda.empty_cache()
-                    del p_inputs, q_inputs
+                    del p_inputs, q_inputs, batch
 
             if epoch % self.save_period == 0:
-                if self.val_dataloader:
-                    self.eval(epoch)
+
                 filename = f"epoch_{epoch}"
                 self.save(filename)
 
@@ -525,41 +530,44 @@ class DenseRetrieval:
         """
         Evaluation Loop
         """
-        self.p_encoder.zero_grad()
-        self.q_encoder.zero_grad()
+
         self.p_encoder.eval()
         self.q_encoder.eval()
 
         torch.cuda.empty_cache()
 
-        with tqdm(self.val_dataloader, unit="batch", desc="Eval: ") as tepoch:
+        with tqdm(self.val_dataloader, unit="batch", desc=f"{epoch}th Eval: ") as tepoch:
+            mean_loss = []
             for batch in tepoch:
                 batch_size = batch[0].shape[0]
                 targets = torch.zeros(batch_size).long()
                 targets = targets.to(self.device)
                 p_inputs, q_inputs = self.reshape_batch_inputs(batch, is_train=False)
+
                 p_outputs = self.p_encoder(**p_inputs)  # (batch_size*(num_neg+1), emb_dim)
                 q_outputs = self.q_encoder(**q_inputs)  # (batch_size*, emb_dim)
                 # Calculate similarity score & loss
-                p_outputs = p_outputs.pooler_output.view(batch_size, 1, -1)
+                p_outputs = p_outputs.pooler_output.view(batch_size, self.num_neg + 1, -1)
                 q_outputs = q_outputs.pooler_output.view(batch_size, 1, -1)
 
-                sim_scores = torch.bmm(
-                    q_outputs, torch.transpose(p_outputs, 1, 2)
-                ).squeeze()  # (batch_size, num_neg + 1)
+                sim_scores = torch.bmm(q_outputs, torch.transpose(p_outputs, 1, 2)).squeeze()  # (batch_size, 1)
                 sim_scores = sim_scores.view(batch_size, -1)
                 sim_scores = F.log_softmax(sim_scores, dim=1)
-
                 loss = self.loss(sim_scores, targets)
+                mean_loss.append(loss.item())
                 tepoch.set_postfix(loss=f"{str(loss.item())}")
 
                 if self.is_monitoring:
                     wandb.log({"epoch": epoch, "Eval loss": loss})
+
+                self.p_encoder.zero_grad()
+                self.q_encoder.zero_grad()
                 torch.cuda.empty_cache()
                 del p_inputs, q_inputs
+            wandb.log({"Eval loss mean": sum(mean_loss) / len(mean_loss)})
 
     def get_dense_embedding(
-        self, p_encoder=None, passage_dataloader=None, pickle_name="dense_embedding.bin"
+        self, p_encoder=None, passage_dataloader=None, pickle_name="dense_embedding.bin", reset=False
     ) -> NoReturn:
 
         """
@@ -575,10 +583,10 @@ class DenseRetrieval:
 
         emd_path = os.path.join(self.data_path, pickle_name)
 
-        if os.path.isfile(emd_path):
+        if os.path.isfile(emd_path) and reset is False:
             with open(emd_path, "rb") as file:
                 self.p_embedding = pickle.load(file)
-            print("Embedding pickle load.")
+            # print("Embedding pickle load.")
 
         else:
             print("Build passage embedding")
@@ -590,7 +598,7 @@ class DenseRetrieval:
             print("Embedding pickle saved.")
 
     def get_relevant_doc(
-        self, queries: List, k: Optional[int] = 1, p_encoder=None, q_encoder=None, passage_dataloader=None
+        self, queries: List, k: Optional[int] = 1, p_encoder=None, q_encoder=None, passage_dataloader=None, reset=False
     ) -> Tuple[List, List]:
 
         if p_encoder is None:
@@ -610,7 +618,8 @@ class DenseRetrieval:
                 self.conf.device
             )  # [num_query, model_maxlen]
             q_emb = q_encoder(**q_seqs_val).pooler_output.to("cpu")  # [num_query, emb_dim]
-            self.get_dense_embedding()
+            if reset is True:
+                self.get_dense_embedding()
             # p_embs = self.cache_passage_dense_vector(passage_dataloader, p_encoder)
 
         p_embs = torch.stack(self.p_embedding, dim=0).view(
