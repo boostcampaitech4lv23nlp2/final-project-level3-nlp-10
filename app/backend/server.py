@@ -1,7 +1,8 @@
 from typing import List
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, File, UploadFile
+from api import CSR
+from fastapi import APIRouter, FastAPI, File
 
 app = FastAPI()
 stt_router = APIRouter(prefix="/stt")
@@ -23,9 +24,9 @@ def read_root():
 
 
 @app.post("/stt/")
-async def get_stt(files: List[UploadFile] = File(...)):
-    print(files)
-    return {"test": "STT"}
+async def get_stt(files: List[bytes] = File(...)):
+    result = CSR(files[0])
+    return result
 
 
 @app.post("/save/")
