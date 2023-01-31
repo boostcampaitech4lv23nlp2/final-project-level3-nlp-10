@@ -2,10 +2,11 @@ common:
   seed: 12345
   batch_size: 4
   learning_rate: 5e-5
-  num_train_epochs: 5
+  num_train_epochs: 2
   dataset_path: /opt/ml/final-project-level3-nlp-10/ml/data/project_dataset
 wandb:
-  project_name: Final_FiD_train
+  #project_name: Final_FiD_train
+  project_name: Final_FiD_trial
   entity_name: boost2end
 dpr:
   emb_type: valid # [train, valid, all] 중 어떤 dataset으로 embedding passage들을 사용할 지 선택.
@@ -25,5 +26,6 @@ fid:
   encoder_tokenizer: klue/bert-base
   p_encoder_path: model/saved_models/klue_bert-base/p_encoder
   q_encoder_path: model/saved_models/klue_bert-base/q_encoder
+  model_save_path: model/saved_models/fid/
   reader_model: alaggung/bart-r3f
   topk: 5

@@ -1,3 +1,5 @@
+import os
+
 import torch
 import wandb
 from data.make_dataset import ProjectDataset
@@ -5,7 +7,7 @@ from model.models import BertEncoder, FiD
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import AutoTokenizer, TrainingArguments
+from transformers import AutoConfig, AutoTokenizer, TrainingArguments
 from utils.dpr import DenseRetrieval
 
 
@@ -64,12 +66,10 @@ def fid_train(conf):
     )
     # retriever.set_passage_dataloader()
     retriever.create_passage_embeddings()
-    quit()
-    model = FiD.from_path(
-        config=conf,
-        args=args,
-        reader_model_path=conf.fid.reader_model,
-    )
+
+    basemodel_config = AutoConfig.from_pretrained(conf.fid.reader_model)
+    model = FiD.from_path(model_config=basemodel_config, config=conf)
+    model.load_pretrained_params(conf.fid.reader_model)
     # Train
     model.to(args.device)
     optimizer = AdamW(model.parameters(), lr=conf.common.learning_rate)
@@ -115,19 +115,21 @@ def fid_train(conf):
 
             input_ids = torch.stack([item["input_ids"] for item in inputs], dim=0).to(args.device)
             attention_mask = torch.stack([item["attention_mask"] for item in inputs], dim=0).to(args.device)
-            labels = torch.stack([item["input_ids"] for item in labels]).to(args.device)
+            labels = torch.stack([item["input_ids"] for item in labels]).squeeze().to(args.device)
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            wandb.log({"train_loss": outputs["loss_fn"]})
-            outputs["loss_fn"].backward()
+            wandb.log({"train_loss": outputs["loss"]})
+            outputs["loss"].backward()
             optimizer.step()
-            total_loss += outputs["loss_fn"].detach().cpu()  # gpu에 있는 상태로 total_loss에 더하면 gpu 메모리에 누적됨
+            total_loss += outputs["loss"].detach().cpu()  # gpu에 있는 상태로 total_loss에 더하면 gpu 메모리에 누적됨
         mean_loss = total_loss / len(train_dataloader)
         wandb.log({"train_mean_loss": mean_loss})
 
         # Validation
+        """
         del input_ids
         del attention_mask
         del labels
+        """
         torch.cuda.empty_cache()
         valid_device = args.device
         valid_total_loss = 0
@@ -169,13 +171,13 @@ def fid_train(conf):
 
                 input_ids = torch.stack([item["input_ids"] for item in inputs], dim=0).to(valid_device)
                 attention_mask = torch.stack([item["attention_mask"] for item in inputs], dim=0).to(valid_device)
-                labels = torch.stack([item["input_ids"] for item in labels]).to(valid_device)
+                labels = torch.stack([item["input_ids"] for item in labels]).squeeze().to(valid_device)
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-                wandb.log({"valid_loss": outputs["loss_fn"]})
-                valid_total_loss += outputs["loss_fn"].detach().cpu()
+                wandb.log({"valid_loss": outputs["loss"]})
+                valid_total_loss += outputs["loss"].detach().cpu()
             valid_mean_loss = valid_total_loss / len(valid_dataloader)
             wandb.log({"valid_mean_loss": valid_mean_loss})
 
-    save_path = "./saved_models/fid.pt"
-    torch.save(model, save_path)
-    print(f"saved at {save_path}")
+    model.save_pretrained(os.path.join(conf.fid.model_save_path, "pretrained"))
+    torch.save(model, os.path.join(conf.fid.model_save_path, "model.pt"))
+    print(f"saved at {conf.fid.model_save_path}")

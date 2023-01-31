@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BertModel, BertPreTrainedModel, GenerationMixin
+from transformers import AutoModelForSeq2SeqLM, BartConfig, BartForConditionalGeneration, BertModel, BertPreTrainedModel
+from transformers.modeling_outputs import BaseModelOutput
 
 
 class BertEncoder(BertPreTrainedModel):
@@ -12,51 +12,66 @@ class BertEncoder(BertPreTrainedModel):
         self.init_weights()
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None):
-
         outputs = self.bert(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)
-
         pooled_output = outputs[1]
         return pooled_output
 
 
-class FiD(nn.Module, GenerationMixin):
-    def __init__(self, conf, args, reader, encoder_tokenizer, model_config=None):
+class FiDEncoder(nn.Module):
+    def __init__(self, encoder, conf):
         super().__init__()
+
+        self.encoder = encoder
         self.conf = conf
-        self.args = args
-        self.r_encoder = reader.get_encoder()
-        self.r_decoder = reader.get_decoder()
-        self.reader = reader
-        self.encoder_tokenizer = encoder_tokenizer
-        self.config = model_config
-        # self.generation_config = GenerationConfig.from_model_config(model_config)
 
-    @classmethod
-    def from_path(
-        cls,
-        config,
-        args,
-        reader_model_path,
-        model_config=None,
-    ):
-        encoder_tokenizer = AutoTokenizer.from_pretrained(reader_model_path)
-        reader = AutoModelForSeq2SeqLM.from_pretrained(reader_model_path)
-
-        return cls(
-            conf=config,
-            args=args,
-            model_config=model_config,
-            reader=reader,
-            encoder_tokenizer=encoder_tokenizer,
+    def forward(self, input_ids=None, attention_mask=None, **kwargs):
+        # passage_length = input_ids.size(-1)
+        bsz, total_length = input_ids.shape
+        passage_length = total_length // self.conf.fid.topk
+        input_ids = input_ids.view(bsz * self.conf.fid.topk, passage_length)
+        attention_mask = attention_mask.view(bsz * self.conf.fid.topk, passage_length)
+        encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
+        # facebook github에서 모든 output들을 더했음
+        encoder_outputs = BaseModelOutput(
+            last_hidden_state=encoder_outputs[0].view(bsz, self.conf.fid.topk * passage_length, -1),
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor = None):
+        return encoder_outputs
+
+
+class FiD(BartForConditionalGeneration):
+    def __init__(self, model_config: BartConfig, conf):
+        super().__init__(model_config)  # self.model: BartModel, self.lm_head 생성
+        self.wrap_encoder(self.model.encoder, conf)
+        self.conf = conf
+
+    def load_pretrained_params(self, basemodel_name):
+        basemodel = AutoModelForSeq2SeqLM.from_pretrained(basemodel_name)
+        self.model.encoder.encoder.load_state_dict(basemodel.get_encoder().state_dict())
+        self.model.decoder.load_state_dict(basemodel.get_decoder().state_dict())
+        self.lm_head.load_state_dict(basemodel.lm_head.state_dict())
+        print(f"loaded {basemodel_name} parameters.")
+
+    def wrap_encoder(self, encoder, conf):
+        self.model.encoder = FiDEncoder(encoder, conf)
+
+    @classmethod
+    def from_path(cls, model_config, config):
+
+        return cls(
+            model_config=model_config,
+            conf=config,
+        )
+
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor = None, **kwargs):
         """
 
         Args:
             input_ids (torch.Tensor): (batch_size, topk, seq_max_len) 형태의 Tensor
             attention_mask (torch.Tensor): (batch_size, topk, seq_max_len) 형태의 Tensor
-            labels (torch.Tensor): (batch_size, 1, seq_max_len) 형태의 summarization Tensor
+            labels (torch.Tensor): (batch_size, seq_max_len) 형태의 summarization Tensor
 
         Return:
             {
@@ -68,38 +83,19 @@ class FiD(nn.Module, GenerationMixin):
                     (batch_size, max_seq_len, hidden_dim) 크기의 tensor
             }
         """
+        if input_ids is not None:
+            input_ids = input_ids.view(input_ids.size(0), -1)
+        if attention_mask is not None:
+            attention_mask = attention_mask.view(attention_mask.size(0), -1)
 
-        passage_length = input_ids.size(-1)
-        input_ids = input_ids.view(self.conf.common.batch_size * self.conf.fid.topk, -1)
-        attention_mask = attention_mask.view(self.conf.common.batch_size * self.conf.fid.topk, -1)
-        encoder_outputs = self.r_encoder(input_ids=input_ids, attention_mask=attention_mask)
-        # facebook github에서 모든 output들을 더했음
-        encoder_outputs = (
-            encoder_outputs[0].view(self.conf.common.batch_size, self.conf.fid.topk * passage_length, -1),
-        ) + encoder_outputs[1:]
-        # encoder_outptus : (batch_size, topk*seq_max_len, hidden_dim)
-        encoder_outputs = encoder_outputs[0]
-        # decoder_input_ids : (batch_size, topk, seq_max_len)
-        decoder_input_ids = shift_tokens_right(
-            labels, self.encoder_tokenizer.pad_token_id, self.reader.config.decoder_start_token_id
+        return super().forward(input_ids=input_ids, attention_mask=attention_mask, labels=labels, **kwargs)
+
+    def generate(self, input_ids, attention_mask, max_length=256):
+        return super().generate(
+            inputs=input_ids.view(input_ids.size(0), -1),
+            attention_mask=attention_mask.view(attention_mask.size(0), -1),
+            max_length=max_length,
         )
-        # decoder_output : (batch_size, seq_max_len, hidden_dim)
-        decoder_output = self.r_decoder(
-            input_ids=decoder_input_ids.view(-1, decoder_input_ids.size(-1)),
-            encoder_hidden_states=encoder_outputs.view(self.conf.common.batch_size, -1, encoder_outputs.size(-1)),
-        )["last_hidden_state"]
-        lm_logits = self.reader.lm_head(decoder_output)
-
-        # TODO facebook에서는 안하고 BartConditionalGenerate에서는 함
-        # lm_logits: (batch_size, seq_max_len, vocab_size)
-        lm_logits = lm_logits + self.reader.final_logits_bias.to(lm_logits.device)
-
-        masked_lm_loss = None
-        if labels is not None:
-            loss_fn = CrossEntropyLoss()
-            masked_lm_loss = loss_fn(lm_logits.view(-1, self.reader.config.vocab_size), labels.view(-1))
-
-        return {"logits": lm_logits, "loss_fn": masked_lm_loss, "last_hidden_state": decoder_output}
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):

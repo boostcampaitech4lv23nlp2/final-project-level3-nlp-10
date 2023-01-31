@@ -4,7 +4,6 @@ import sys
 
 import numpy as np
 import torch
-from model.dpr_eval import eval as dpr_eval
 from model.dpr_train import train as dpr_train
 from model.fid_train import fid_train
 from omegaconf import OmegaConf
@@ -36,8 +35,6 @@ if __name__ == "__main__":
     if sys_args.option == "dpr":
         if sys_args.type == "train":
             dpr_train(conf)
-        else:
-            dpr_eval(conf)
     elif sys_args.option == "fid":
         if sys_args.type == "train":
             fid_train(conf)
