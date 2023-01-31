@@ -1,7 +1,7 @@
 clean: clean-pyc clean-test
 quality: set-style-dep check-quality
 style: set-style-dep set-style
-setup: set-precommit set-style-dep set-test-dep set-git set-dev
+setup: set-precommit set-style-dep set-test-dep set-git set-dev set-mecab
 test: set-test-dep set-test
 
 
@@ -29,6 +29,13 @@ set-style:
 	black --config pyproject.toml .
 	isort --settings-path pyproject.toml .
 	flake8 .
+
+set-mecab:
+	apt-get update
+	apt-get install g++ openjdk-8-jdk python3-dev python3-pip curl git
+	python3 -m pip install --upgrade pip
+	python3 -m pip install konlpy
+	bash <(curl -s https://raw.githubusercontent.com/konlpy/konlpy/master/scripts/mecab.sh)
 
 check-quality:
 	black --config pyproject.toml --check .
