@@ -353,7 +353,7 @@ class DenseRetrieval:
         else:
             self.val_dataloader, self.train_passage_dataloader = None, None
         self.set_optimziers(conf)
-        # self.get_dense_embedding(reset=True)
+        self.get_dense_embedding(reset=True)
         # self.build_faiss()
 
     def prepare_in_batch_negative(
@@ -512,7 +512,6 @@ class DenseRetrieval:
                     targets = targets.to(self.device)
 
                     p_inputs, q_inputs = self.reshape_batch_inputs(batch)
-
                     p_outputs = self.p_encoder(**p_inputs)  # (batch_size*(num_neg+1), emb_dim)
                     q_outputs = self.q_encoder(**q_inputs)  # (batch_size*, emb_dim)
 
@@ -703,20 +702,7 @@ class SparseRetrieval:
             Generate Passage Embedding
             Save TFIDF & Embedding to pickle
         """
-        # emd_path = os.path.join(self.data_path, pickle_name)
-        # tfidfv_path = os.path.join(self.data_path, tfidfv_name)
         self.p_embedding = self.tfidfv.fit_transform(self.contexts)
-        # if os.path.isfile(emd_path):
-        #     with open(emd_path, "rb") as file:
-        #         self.p_embedding = pickle.load(file)
-        #     print("Embedding pickle load.")
-        # else:
-        #     print("Build passage embedding")
-        #     self.p_embedding = self.tfidfv.fit_transform(self.contexts)
-        #     print(self.p_embedding.shape)
-        #     with open(emd_path, "wb") as file:
-        #         pickle.dump(self.p_embedding, file)
-        #     print("Embedding pickle saved.")
 
     def build_faiss(self, num_clusters=64) -> NoReturn:
 
@@ -831,184 +817,107 @@ class BM25:
         return doc_scores, doc_indices
 
 
-# class DPRRetriever:
-#     def __init__(self,
-#                  conf,
-#                  tokenizer,
-#                  p_encoder,
-#                  generator,
-#                  dataset,
-#                  data_path='./'):
-#         self.vector_size = conf.vector_size
-#         self.tokenizer = tokenizer
-#         self.p_encoder = p_encoder
-#         self.generator = generator
-#         self.dataset = dataset
-#         self.dataloader, self.passage_size = self.prepare_data()
-#         self.data_path = data_path
+class KeywordDPRDataset(TensorDataset):
+    def __init__(self, query_dataset, context_dataset, tokenizer, num_neg=4):
+        self.tokenizer = tokenizer
+        self.query_dataset = query_dataset
+        self.context_dataset = context_dataset
+        self.corpus = np.array(list(set([example for example in self.context_dataset])))
+        self.corpus_len = len(self.corpus)
+        self.num_neg = num_neg
 
-#         self.p_embedding = None
-#         self.indexer = None
+    def __len__(self):
+        return self.corpus_len
 
-#         self.get_dense_embedding()
+    def sample_data(self, query, context):
+        p_with_neg = []
+        # negative_sampling
+        while True:
+            neg_idxs = np.random.randint(self.corpus_len, size=self.num_neg)
+            if context not in self.corpus[neg_idxs]:
+                p_neg = self.corpus[neg_idxs]
+                p_with_neg.append(context)
+                p_with_neg.extend(p_neg)
+                break
 
+        # keyword sampling
+        num = np.random.randint(1, len(query))
+        q_idxs = np.random.choice(len(query), size=num)
+        query = np.array(query)
+        q_sample = "[SEP]".join(query[q_idxs])
+        return q_sample, p_with_neg
 
-#     def prepare_data(
-#         self, dataset=None, tokenizer=None, batch_size=1):
+    def __getitem__(self, idx):
+        query, p_with_neg = self.sample_data(self.query_dataset[idx], self.context_dataset[idx])
+        q_seqs = self.tokenizer(query, padding="max_length", truncation=True, return_tensors="pt")
+        p_seqs = self.tokenizer(p_with_neg, padding="max_length", truncation=True, return_tensors="pt")
 
-#         if tokenizer is None:
-#             tokenizer = self.tokenizer
-
-#         seqs = tokenizer(dataset, padding="max_length", truncation=True, return_tensors="pt")
-#         passage_dataset = TensorDataset(
-#             seqs["input_ids"], seqs["attention_mask"], seqs["token_type_ids"]
-#         )
-#         dataloader = DataLoader(passage_dataset, batch_size=batch_size)
-#         return dataloader, len(dataset)
-
-#     def cache_passage_dense_vector(self, dataloader: DataLoader, encoder):
-#         embs = []
-#         for batch in dataloader:
-#             batch = tuple(t.to(self.conf.device) for t in batch)
-#             inputs = {"input_ids": batch[0], "attention_mask": batch[1], "token_type_ids": batch[2]}
-
-#             emb = encoder(**inputs).pooler_output.to("cpu")
-#             embs.append(emb)
-#             del inputs
-#         return embs
-
-#     def get_dense_embedding(
-#         self, p_encoder=None, dataloader=None, pickle_name="dense_embedding.bin", reset=False
-#     ) -> NoReturn:
-
-#         """
-#         Summary:
-#             Generate Passage Embedding
-#             Save Embedding to pickle
-#         """
-#         if p_encoder is None:
-#             p_encoder = self.p_encoder
-
-#         if dataloader is None:
-#             dataloader = self.dataloader
-
-#         emd_path = os.path.join(self.data_path, pickle_name)
-
-#         if os.path.isfile(emd_path) and reset is False:
-#             with open(emd_path, "rb") as file:
-#                 self.p_embedding = pickle.load(file)
-#             # print("Embedding pickle load.")
-
-#         else:
-#             print("Build passage embedding")
-#             with torch.no_grad():
-#                 p_encoder.eval()
-#                 self.p_embedding = self.cache_passage_dense_vector(dataloader, p_encoder)
-#             with open(emd_path, "wb") as file:
-#                 pickle.dump(self.p_embedding, file)
-#             print("Embedding pickle saved.")
+        max_len = p_seqs["input_ids"].size(-1)
+        p_seqs["input_ids"] = p_seqs["input_ids"].view(-1, self.num_neg + 1, max_len)
+        p_seqs["attention_mask"] = p_seqs["attention_mask"].view(-1, self.num_neg + 1, max_len)
+        p_seqs["token_type_ids"] = p_seqs["token_type_ids"].view(-1, self.num_neg + 1, max_len)
+        return (
+            p_seqs["input_ids"],
+            p_seqs["attention_mask"],
+            p_seqs["token_type_ids"],
+            q_seqs["input_ids"][0],
+            q_seqs["attention_mask"][0],
+            q_seqs["token_type_ids"][0],
+        )
 
 
-#     def build_faiss(self, num_clusters=64) -> NoReturn:
-#         indexer_name = f"dense_faiss_clusters{num_clusters}.faiss"
-#         indexer_path = os.path.join(self.data_path, indexer_name)
-#         if os.path.isfile(indexer_path):
-#             print("Load Saved Faiss Indexer.")
-#             self.indexer = faiss.read_index(indexer_path)
+class KeywordDenseRetrieval(DenseRetrieval):
+    def __init__(
+        self,
+        conf,
+        num_neg,
+        tokenizer,
+        p_encoder,
+        q_encoder,
+        save_period: int = 1,
+        eval_function=None,
+        train_query_dataset=None,
+        train_context_dataset=None,
+        val_query_dataset=None,
+        val_context_dataset=None,
+        data_path="./data/ckpt",
+        is_bm25=False,
+        is_monitoring=False,
+    ):
+        super().__init__(
+            conf,
+            num_neg,
+            tokenizer,
+            p_encoder,
+            q_encoder,
+            save_period,
+            eval_function,
+            train_query_dataset,
+            train_context_dataset,
+            val_query_dataset,
+            val_context_dataset,
+            data_path,
+            is_bm25,
+            is_monitoring,
+        )
 
-#         else:
-#             p_emb = np.array(self.p_embedding)
-#             emb_dim = p_emb.shape[-1]
+    def prepare_in_batch_negative(
+        self, query_dataset, context_dataset, tokenizer=None, is_bm25: bool = False, is_train=False
+    ):
 
-#             num_clusters = num_clusters
-#             quantizer = faiss.IndexFlatL2(emb_dim)
+        if tokenizer is None:
+            tokenizer = self.tokenizer
+        _dataset = KeywordDPRDataset(
+            query_dataset=query_dataset, context_dataset=context_dataset, tokenizer=tokenizer, num_neg=self.num_neg
+        )
 
-#             self.indexer = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, num_clusters, faiss.METRIC_L2)
-#             self.indexer.train(p_emb)
-#             self.indexer.add(p_emb)
-#             faiss.write_index(self.indexer, indexer_path)
-#             print("Faiss Indexer Saved.")
-#         return indexer_path
+        batch_size = self.conf.per_device_train_batch_size if is_train else self.conf.per_device_eval_batch_size
+        dataloader = DataLoader(_dataset, shuffle=is_train, batch_size=batch_size)
 
-#     def postprocess_docs(self, docs, input_strings, prefix=None, k=1, return_tensors=None):
-#         def cat_input_and_doc(doc_title, doc_text, input_string, prefix):
-#             # TODO(Patrick): if we train more RAG models, I want to put the input first to take advantage of effortless truncation
-#             # TODO(piktus): better handling of truncation
-#             if doc_title.startswith('"'):
-#                 doc_title = doc_title[1:]
-#             if doc_title.endswith('"'):
-#                 doc_title = doc_title[:-1]
-#             if prefix is None:
-#                 prefix = ""
-#             out = (prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string).replace(
-#                 "  ", " "
-#             )
-#             return out
+        valid_seqs = tokenizer(context_dataset, padding="max_length", truncation=True, return_tensors="pt")
+        passage_dataset = TensorDataset(
+            valid_seqs["input_ids"], valid_seqs["attention_mask"], valid_seqs["token_type_ids"]
+        )
 
-#         rag_input_strings = [
-#             cat_input_and_doc(
-#                 docs[i]["title"][j],
-#                 docs[i]["text"][j],
-#                 input_strings[i],
-#                 prefix,
-#             )
-#             for i in range(len(docs))
-#             for j in range(k)
-#         ]
-#         contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
-#             rag_input_strings,
-#             max_length=self.config.max_combined_length,
-#             return_tensors=return_tensors,
-#             padding="max_length",
-#             truncation=True,
-#         )
-#         return contextualized_inputs["input_ids"], contextualized_inputs["attention_mask"]
-
-
-#     def __call__(self, q_input_ids, q_embs, k: Optional[int] = 1, p_encoder=None, prefix=None, reset = False, return_tensors='pt'
-#     ):
-#         doc_ids, retrieved_doc_embeds = self.retrieve(q_embs, k)
-#         docs = [self.dataset[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
-
-#         input_strings = self.batch_decode(q_input_ids, skip_special_tokens=True)
-
-#         context_input_ids, context_attention_mask = self.postprocess_docs(
-#             docs, input_strings, prefix, k, return_tensors=return_tensors
-#         )
-#         return BatchEncoding(
-#                 {
-#                     "context_input_ids": context_input_ids,
-#                     "context_attention_mask": context_attention_mask,
-#                     "retrieved_doc_embeds": retrieved_doc_embeds,
-#                     "doc_ids": doc_ids,
-#                 },
-#                 tensor_type=return_tensors,
-#             )
-
-
-#     def retrieve(
-#         self, q_embs, k: Optional[int] = 1, p_encoder=None, reset = False
-#     ) -> Tuple[List, List]:
-
-#         if p_encoder is None:
-#             p_encoder = self.p_encoder
-
-#         with torch.no_grad():
-#             p_encoder.eval()
-
-#             if reset is True:
-#                 self.get_dense_embedding()
-
-#         with timer("query faiss search"):
-#             batch_ids = []
-#             batch_vectors = []
-#             for q_emb in q_embs:
-#                 _, ids = self.indexer.search(q_emb, k)
-#                 vectors = [self.p_embedding[[i for i in indices if i >= 0]] for indices in ids]
-#                 batch_ids.append(ids)
-#                 batch_vectors.append(vectors)
-#         # for i in range(len(vectors)):
-#         #     if len(vectors[i]) < k:
-#         #         vectors[i] = np.vstack([vectors[i], np.zeros((k - len(vectors[i]), self.vector_size))])
-
-#         return np.array(batch_ids), np.array(batch_vectors)
+        passage_dataloader = DataLoader(passage_dataset, batch_size=batch_size)
+        return dataloader, passage_dataloader
