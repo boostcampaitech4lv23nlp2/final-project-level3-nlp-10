@@ -14,12 +14,12 @@ dpr:
   emb_valid_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/valid
   emb_all_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/all
   encoder_tokenizer: klue/bert-base
+  model_name: klue/bert-base
   do_eval: True
   eval:
     p_encoder_path: model/saved_models/klue_bert-base/p_encoder
     q_encoder_path: model/saved_models/klue_bert-base/q_encoder
   train:
-    test_sample: -1
     neg_num: 7
 
 fid:

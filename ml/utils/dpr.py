@@ -118,8 +118,8 @@ class DenseRetrieval:
         print(f"total {len(p_with_neg)} passages for p_seq")
 
         # 2. (Question, Passage) 데이터셋 만들어주기
-        q_seqs = tokenizer(dataset.question, padding="max_length", truncation=True, return_tensors="pt")
-        p_seqs = tokenizer(p_with_neg, padding="max_length", truncation=True, return_tensors="pt")
+        q_seqs = tokenizer(dataset.question, padding="max_length", max_length=512, truncation=True, return_tensors="pt")
+        p_seqs = tokenizer(p_with_neg, padding="max_length", max_length=512, truncation=True, return_tensors="pt")
 
         max_len = p_seqs["input_ids"].size(-1)
         self.max_len = max_len
