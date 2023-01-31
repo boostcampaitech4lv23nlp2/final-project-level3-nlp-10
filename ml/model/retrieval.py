@@ -21,6 +21,9 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.models.bert.modeling_bert import BertModel, BertPreTrainedModel
 from transformers.models.dpr import DPRPretrainedContextEncoder, DPRPretrainedQuestionEncoder
+
+# from transformers.models.roberta.modeling_roberta import RobertaModel, RobertaPreTrainedModel
+# from transformers.tokenization_utils_base import BatchEncoding
 from transformers.utils import ModelOutput
 from utils import timer
 
@@ -351,7 +354,7 @@ class DenseRetrieval:
             self.val_dataloader, self.train_passage_dataloader = None, None
         self.set_optimziers(conf)
         # self.get_dense_embedding(reset=True)
-        # self.indexer_path = self.build_faiss()
+        # self.build_faiss()
 
     def prepare_in_batch_negative(
         self, query_dataset, context_dataset, tokenizer=None, is_bm25: bool = False, is_train=False
@@ -359,19 +362,35 @@ class DenseRetrieval:
 
         if tokenizer is None:
             tokenizer = self.tokenizer
-
+        if is_bm25:
+            bm25 = BM25(self.tokenizer, context_dataset)
         corpus = np.array(list(set([example for example in context_dataset])))
         p_with_neg = []
 
         for c in tqdm(context_dataset, desc="in_batch_negative"):
-            while True:
-                neg_idxs = np.random.randint(len(corpus), size=self.num_neg)
+            if not is_bm25:
+                while True:
+                    neg_idxs = np.random.randint(len(corpus), size=self.num_neg)
+                    if c not in corpus[neg_idxs]:
+                        p_neg = corpus[neg_idxs]
+                        p_with_neg.append(c)
+                        p_with_neg.extend(p_neg)
+                        break
+            else:
+                score, neg_indices = bm25.get_relevant_doc(query_dataset, self.num_neg, reverse=True)
                 if c not in corpus[neg_idxs]:
-                    p_neg = corpus[neg_idxs]
-
+                    p_neg = corpus[neg_indices]
                     p_with_neg.append(c)
                     p_with_neg.extend(p_neg)
-                    break
+                else:
+                    while True:
+                        neg_idxs = np.random.randint(len(corpus), size=self.num_neg)
+                        if c not in corpus[neg_idxs]:
+                            p_neg = corpus[neg_idxs]
+                            p_with_neg.append(c)
+                            p_with_neg.extend(p_neg)
+                            break
+
         q_seqs = tokenizer(query_dataset, padding="max_length", truncation=True, return_tensors="pt")
         p_seqs = tokenizer(p_with_neg, padding="max_length", truncation=True, return_tensors="pt")
 
@@ -408,8 +427,8 @@ class DenseRetrieval:
             batch = tuple(t.to(self.conf.device) for t in batch)
             inputs = {"input_ids": batch[0], "attention_mask": batch[1], "token_type_ids": batch[2]}
 
-            emb = encoder(**inputs).pooler_output.to("cpu")
-            embs.append(emb)
+            emb = encoder(**inputs).pooler_output.detach().cpu()  # .numpy()
+            embs.extend(emb)
             del inputs
         return embs
 
@@ -595,25 +614,12 @@ class DenseRetrieval:
             with torch.no_grad():
                 p_encoder.eval()
                 self.p_embedding = self.cache_passage_dense_vector(passage_dataloader, p_encoder)
+
             with open(emd_path, "wb") as file:
                 pickle.dump(self.p_embedding, file)
             print("Embedding pickle saved.")
 
     def build_faiss(self, num_clusters=64) -> NoReturn:
-
-        """
-        Summary:
-            속성으로 저장되어 있는 Passage Embedding을
-            Faiss indexer에 fitting 시켜놓습니다.
-            이렇게 저장된 indexer는 `get_relevant_doc`에서 유사도를 계산하는데 사용됩니다.
-        Note:
-            Faiss는 Build하는데 시간이 오래 걸리기 때문에,
-            매번 새롭게 build하는 것은 비효율적입니다.
-            그렇기 때문에 build된 index 파일을 저정하고 다음에 사용할 때 불러옵니다.
-            다만 이 index 파일은 용량이 1.4Gb+ 이기 때문에 여러 num_clusters로 시험해보고
-            제일 적절한 것을 제외하고 모두 삭제하는 것을 권장합니다.
-        """
-
         indexer_name = f"dense_faiss_clusters{num_clusters}.faiss"
         indexer_path = os.path.join(self.data_path, indexer_name)
         if os.path.isfile(indexer_path):
@@ -621,7 +627,11 @@ class DenseRetrieval:
             self.indexer = faiss.read_index(indexer_path)
 
         else:
-            p_emb = np.array(self.p_embedding)
+            print(self.p_embedding[0].shape)
+
+            # p_emb = np.ndarray(self.p_embedding)
+            p_embs = torch.stack(self.p_embedding, dim=0).view(len(self.p_embedding), -1)
+            p_emb = p_embs.numpy()
             emb_dim = p_emb.shape[-1]
 
             num_clusters = num_clusters
@@ -778,7 +788,7 @@ class SparseRetrieval:
         return D.tolist()[0], I.tolist()[0]
 
 
-class BM25(SparseRetrieval):
+class BM25:
     def __init__(
         self,
         tokenizer,
@@ -798,7 +808,7 @@ class BM25(SparseRetrieval):
         with timer("bm25 building"):
             self.p_embedding = BM25Okapi(self.contexts, tokenizer=self.tokenizer)
 
-    def get_relevant_doc(self, queries: List, k: Optional[int] = 1) -> Tuple[List, List]:
+    def get_relevant_doc(self, queries: List, k: Optional[int] = 1, reverse=False) -> Tuple[List, List]:
         with timer("transform"):
             tokenized_queries = [self.tokenizer(query) for query in queries]
 
@@ -811,6 +821,194 @@ class BM25(SparseRetrieval):
         doc_indices = []
         for i in range(result.shape[0]):
             sorted_result = np.argsort(result[i, :])[::-1]
-            doc_scores.append(result[i, :][sorted_result].tolist()[:k])
-            doc_indices.append(sorted_result.tolist()[:k])
+            if not reverse:
+                doc_scores.append(result[i, :][sorted_result].tolist()[:k])
+                doc_indices.append(sorted_result.tolist()[:k])
+            else:
+                doc_scores.append(result[i, :][sorted_result].tolist()[-k:])
+                doc_indices.append(sorted_result.tolist()[-k:])
+
         return doc_scores, doc_indices
+
+
+# class DPRRetriever:
+#     def __init__(self,
+#                  conf,
+#                  tokenizer,
+#                  p_encoder,
+#                  generator,
+#                  dataset,
+#                  data_path='./'):
+#         self.vector_size = conf.vector_size
+#         self.tokenizer = tokenizer
+#         self.p_encoder = p_encoder
+#         self.generator = generator
+#         self.dataset = dataset
+#         self.dataloader, self.passage_size = self.prepare_data()
+#         self.data_path = data_path
+
+#         self.p_embedding = None
+#         self.indexer = None
+
+#         self.get_dense_embedding()
+
+
+#     def prepare_data(
+#         self, dataset=None, tokenizer=None, batch_size=1):
+
+#         if tokenizer is None:
+#             tokenizer = self.tokenizer
+
+#         seqs = tokenizer(dataset, padding="max_length", truncation=True, return_tensors="pt")
+#         passage_dataset = TensorDataset(
+#             seqs["input_ids"], seqs["attention_mask"], seqs["token_type_ids"]
+#         )
+#         dataloader = DataLoader(passage_dataset, batch_size=batch_size)
+#         return dataloader, len(dataset)
+
+#     def cache_passage_dense_vector(self, dataloader: DataLoader, encoder):
+#         embs = []
+#         for batch in dataloader:
+#             batch = tuple(t.to(self.conf.device) for t in batch)
+#             inputs = {"input_ids": batch[0], "attention_mask": batch[1], "token_type_ids": batch[2]}
+
+#             emb = encoder(**inputs).pooler_output.to("cpu")
+#             embs.append(emb)
+#             del inputs
+#         return embs
+
+#     def get_dense_embedding(
+#         self, p_encoder=None, dataloader=None, pickle_name="dense_embedding.bin", reset=False
+#     ) -> NoReturn:
+
+#         """
+#         Summary:
+#             Generate Passage Embedding
+#             Save Embedding to pickle
+#         """
+#         if p_encoder is None:
+#             p_encoder = self.p_encoder
+
+#         if dataloader is None:
+#             dataloader = self.dataloader
+
+#         emd_path = os.path.join(self.data_path, pickle_name)
+
+#         if os.path.isfile(emd_path) and reset is False:
+#             with open(emd_path, "rb") as file:
+#                 self.p_embedding = pickle.load(file)
+#             # print("Embedding pickle load.")
+
+#         else:
+#             print("Build passage embedding")
+#             with torch.no_grad():
+#                 p_encoder.eval()
+#                 self.p_embedding = self.cache_passage_dense_vector(dataloader, p_encoder)
+#             with open(emd_path, "wb") as file:
+#                 pickle.dump(self.p_embedding, file)
+#             print("Embedding pickle saved.")
+
+
+#     def build_faiss(self, num_clusters=64) -> NoReturn:
+#         indexer_name = f"dense_faiss_clusters{num_clusters}.faiss"
+#         indexer_path = os.path.join(self.data_path, indexer_name)
+#         if os.path.isfile(indexer_path):
+#             print("Load Saved Faiss Indexer.")
+#             self.indexer = faiss.read_index(indexer_path)
+
+#         else:
+#             p_emb = np.array(self.p_embedding)
+#             emb_dim = p_emb.shape[-1]
+
+#             num_clusters = num_clusters
+#             quantizer = faiss.IndexFlatL2(emb_dim)
+
+#             self.indexer = faiss.IndexIVFScalarQuantizer(quantizer, quantizer.d, num_clusters, faiss.METRIC_L2)
+#             self.indexer.train(p_emb)
+#             self.indexer.add(p_emb)
+#             faiss.write_index(self.indexer, indexer_path)
+#             print("Faiss Indexer Saved.")
+#         return indexer_path
+
+#     def postprocess_docs(self, docs, input_strings, prefix=None, k=1, return_tensors=None):
+#         def cat_input_and_doc(doc_title, doc_text, input_string, prefix):
+#             # TODO(Patrick): if we train more RAG models, I want to put the input first to take advantage of effortless truncation
+#             # TODO(piktus): better handling of truncation
+#             if doc_title.startswith('"'):
+#                 doc_title = doc_title[1:]
+#             if doc_title.endswith('"'):
+#                 doc_title = doc_title[:-1]
+#             if prefix is None:
+#                 prefix = ""
+#             out = (prefix + doc_title + self.config.title_sep + doc_text + self.config.doc_sep + input_string).replace(
+#                 "  ", " "
+#             )
+#             return out
+
+#         rag_input_strings = [
+#             cat_input_and_doc(
+#                 docs[i]["title"][j],
+#                 docs[i]["text"][j],
+#                 input_strings[i],
+#                 prefix,
+#             )
+#             for i in range(len(docs))
+#             for j in range(k)
+#         ]
+#         contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
+#             rag_input_strings,
+#             max_length=self.config.max_combined_length,
+#             return_tensors=return_tensors,
+#             padding="max_length",
+#             truncation=True,
+#         )
+#         return contextualized_inputs["input_ids"], contextualized_inputs["attention_mask"]
+
+
+#     def __call__(self, q_input_ids, q_embs, k: Optional[int] = 1, p_encoder=None, prefix=None, reset = False, return_tensors='pt'
+#     ):
+#         doc_ids, retrieved_doc_embeds = self.retrieve(q_embs, k)
+#         docs = [self.dataset[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
+
+#         input_strings = self.batch_decode(q_input_ids, skip_special_tokens=True)
+
+#         context_input_ids, context_attention_mask = self.postprocess_docs(
+#             docs, input_strings, prefix, k, return_tensors=return_tensors
+#         )
+#         return BatchEncoding(
+#                 {
+#                     "context_input_ids": context_input_ids,
+#                     "context_attention_mask": context_attention_mask,
+#                     "retrieved_doc_embeds": retrieved_doc_embeds,
+#                     "doc_ids": doc_ids,
+#                 },
+#                 tensor_type=return_tensors,
+#             )
+
+
+#     def retrieve(
+#         self, q_embs, k: Optional[int] = 1, p_encoder=None, reset = False
+#     ) -> Tuple[List, List]:
+
+#         if p_encoder is None:
+#             p_encoder = self.p_encoder
+
+#         with torch.no_grad():
+#             p_encoder.eval()
+
+#             if reset is True:
+#                 self.get_dense_embedding()
+
+#         with timer("query faiss search"):
+#             batch_ids = []
+#             batch_vectors = []
+#             for q_emb in q_embs:
+#                 _, ids = self.indexer.search(q_emb, k)
+#                 vectors = [self.p_embedding[[i for i in indices if i >= 0]] for indices in ids]
+#                 batch_ids.append(ids)
+#                 batch_vectors.append(vectors)
+#         # for i in range(len(vectors)):
+#         #     if len(vectors[i]) < k:
+#         #         vectors[i] = np.vstack([vectors[i], np.zeros((k - len(vectors[i]), self.vector_size))])
+
+#         return np.array(batch_ids), np.array(batch_vectors)
