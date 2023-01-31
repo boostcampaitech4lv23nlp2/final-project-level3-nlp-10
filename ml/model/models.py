@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BertModel, BertPreTrainedModel
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BertModel, BertPreTrainedModel, GenerationMixin
 
 
 class BertEncoder(BertPreTrainedModel):
@@ -19,8 +19,8 @@ class BertEncoder(BertPreTrainedModel):
         return pooled_output
 
 
-class FiD(nn.Module):
-    def __init__(self, conf, args, reader, passage_dataset, encoder_tokenizer):
+class FiD(nn.Module, GenerationMixin):
+    def __init__(self, conf, args, reader, encoder_tokenizer, model_config=None):
         super().__init__()
         self.conf = conf
         self.args = args
@@ -28,18 +28,25 @@ class FiD(nn.Module):
         self.r_decoder = reader.get_decoder()
         self.reader = reader
         self.encoder_tokenizer = encoder_tokenizer
-        self.datasets = passage_dataset
+        self.config = model_config
+        # self.generation_config = GenerationConfig.from_model_config(model_config)
 
     @classmethod
-    def from_path(cls, config, args, reader_model_path, passage_dataset):
+    def from_path(
+        cls,
+        config,
+        args,
+        reader_model_path,
+        model_config=None,
+    ):
         encoder_tokenizer = AutoTokenizer.from_pretrained(reader_model_path)
         reader = AutoModelForSeq2SeqLM.from_pretrained(reader_model_path)
 
         return cls(
             conf=config,
             args=args,
+            model_config=model_config,
             reader=reader,
-            passage_dataset=passage_dataset,
             encoder_tokenizer=encoder_tokenizer,
         )
 

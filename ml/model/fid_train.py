@@ -41,20 +41,34 @@ def fid_train(conf):
     q_encoder = BertEncoder.from_pretrained(conf.fid.q_encoder_path)
     p_encoder = BertEncoder.from_pretrained(conf.fid.p_encoder_path)
     reader_tokenizer = AutoTokenizer.from_pretrained(conf.fid.reader_model)
+
+    if conf.dpr.emb_type == "train":
+        emb_path = conf.dpr.emb_train_path
+        emb_dataset = train_dataset
+    elif conf.dpr.emb_type == "valid":
+        emb_path = conf.dpr.emb_valid_path
+        emb_dataset = valid_dataset
+    elif conf.dpr.emb_type == "all":
+        emb_path = conf.dpr.emb_all_path
+        # TODO dataset for all
+    else:
+        raise Exception("Unsupported emb_type in config.yaml")
     retriever = DenseRetrieval(
         args=args,
-        dataset=train_dataset,
+        dataset=emb_dataset,
         num_neg=-1,
         tokenizer=tokenizer,
         p_encoder=p_encoder,
         q_encoder=q_encoder,
-        emb_save_path=conf.dpr.emb_save_path,
-        eval=conf.dpr.do_eval,
+        emb_save_path=emb_path,
     )
-    retriever.set_passage_dataloader()
+    # retriever.set_passage_dataloader()
     retriever.create_passage_embeddings()
+    quit()
     model = FiD.from_path(
-        config=conf, args=args, reader_model_path=conf.fid.reader_model, passage_dataset=valid_dataset
+        config=conf,
+        args=args,
+        reader_model_path=conf.fid.reader_model,
     )
     # Train
     model.to(args.device)

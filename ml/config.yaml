@@ -5,11 +5,13 @@ common:
   num_train_epochs: 5
   dataset_path: /opt/ml/final-project-level3-nlp-10/ml/data/project_dataset
 wandb:
-  project_name: Final_FiD_trial
+  project_name: Final_FiD_train
   entity_name: boost2end
 dpr:
-  emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/
-  #emb_save_path: /opt/ml/final-project-level3-nlp-10/ml/data/mrc_dense_embeddings/train
+  emb_type: valid # [train, valid, all] 중 어떤 dataset으로 embedding passage들을 사용할 지 선택.
+  emb_train_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/train
+  emb_valid_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/valid
+  emb_all_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/all
   encoder_tokenizer: klue/bert-base
   do_eval: True
   eval:

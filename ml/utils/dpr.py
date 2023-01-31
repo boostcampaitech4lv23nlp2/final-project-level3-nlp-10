@@ -1,3 +1,5 @@
+from typing import List
+
 import os
 import pickle
 
@@ -13,19 +15,14 @@ from transformers import AdamW, get_linear_schedule_with_warmup
 class DenseRetrieval:
     def __init__(
         self,
-        args,
-        dataset,
-        num_neg,
         tokenizer,
         p_encoder,
         q_encoder,
         emb_save_path="data/MRC_dataset/",
-        eval=False,
+        args=None,
+        dataset=None,
+        num_neg=-1,
     ):
-
-        """
-        현재 MRC_dataset에 맞춰져 있음(특히 passage들을 읽는 부분)
-        """
         self.args = args
         self.dataset = dataset
         self.num_neg = num_neg
@@ -35,13 +32,16 @@ class DenseRetrieval:
         self.p_encoder = p_encoder
         self.q_encoder = q_encoder
 
-        self.passages = dataset.context
-
-        print(f"Lengths of unique contexts : {len(self.passages)}")
-        self.ids = list(range(len(self.passages)))
-
-        if not eval:
-            self.prepare_in_batch_negative(num_neg=num_neg)
+        # train인 경우
+        if args and dataset:
+            self.passages = dataset.context
+            if num_neg > 0:
+                self.prepare_in_batch_negative(num_neg=num_neg)
+            print(f"Lengths of unique contexts : {len(self.passages)}")
+            self.ids = list(range(len(self.passages)))
+        # inference인 경우
+        else:
+            del self.p_encoder
 
     def create_passage_embeddings(self):
         pickle_name = "dense_embedding.bin"
@@ -53,6 +53,8 @@ class DenseRetrieval:
             print("Embedding pickle load.")
         else:
             print("Build passage embedding")
+            if self.passages is None:
+                raise Exception("passage embedding 생성 시에는 클래스 생성 시 args, dataset이 필요합니다.")
             tokenized_embs = self.tokenizer(self.passages, padding="max_length", truncation=True, return_tensors="pt")
             tokenized_embs = tokenized_embs.to("cuda")
             self.p_encoder.to("cuda")
@@ -78,7 +80,6 @@ class DenseRetrieval:
 
     def get_passage_by_indices(self, top_docs):
         """
-
         Args:
             top_docs (torch.Tensor): (batch_size, topk) 형태의 tensor
 
@@ -244,7 +245,7 @@ class DenseRetrieval:
                     del p_inputs, q_inputs
                 wandb.log({"train/loss_mean": total_loss / len(tepoch)})
 
-    def get_relevant_doc(self, tokenized_query, k=1, args=None, p_encoder=None, q_encoder=None):
+    def get_relevant_doc(self, tokenized_query, k=1):
         """
         args:
             tokenized_query : (batch_size, seq_len) 크기의 tokenized 된 query (BatchEncoding)
@@ -257,43 +258,38 @@ class DenseRetrieval:
             (batch_size, topk) 형태의 torch.Tensor
 
         """
-
-        if args is None:
-            args = self.args
-
-        if p_encoder is None:
-            p_encoder = self.p_encoder
-
-        if q_encoder is None:
-            q_encoder = self.q_encoder
-
-        q_encoder.to(args.device)
+        device = self.args.device if self.args else "cpu"
+        self.q_encoder.to(device)
+        self.q_encoder.eval()
         with torch.no_grad():
-            p_encoder.eval()
-            q_encoder.eval()
+            tokenized_query = tokenized_query.to(device)
+            q_emb = self.q_encoder(**tokenized_query).to("cpu")  # (num_query=1, emb_dim)
 
-            """
-            q_seqs_val = self.tokenizer([query], padding="max_length", truncation=True, return_tensors="pt").to(
-                args.device
-            )
-            """
-            tokenized_query = tokenized_query.to(args.device)
-            q_emb = q_encoder(**tokenized_query).to("cpu")  # (num_query=1, emb_dim)
-
-            """
-            p_embs = []
-            for batch in tqdm(self.passage_dataloader, desc=):
-
-                batch = tuple(t.to(args.device) for t in batch)
-                p_inputs = {"input_ids": batch[0], "attention_mask": batch[1], "token_type_ids": batch[2]}
-                p_emb = p_encoder(**p_inputs).to("cpu")
-                p_embs.append(p_emb)
-
-        p_embs = torch.stack(p_embs, dim=0).view(len(self.passage_dataloader.dataset), -1)  # (num_passage, emb_dim)
-        dot_prod_scores = torch.matmul(q_emb, torch.transpose(p_embs, 0, 1))
-        """
-        dot_prod_scores = torch.matmul(
-            q_emb, torch.transpose(self.p_embedding, 0, 1)
-        )  # dot_proed_socres: (batch_size, passage전체 개수)
-        rank = torch.argsort(dot_prod_scores, dim=-1, descending=True).squeeze()  # rank: (batch_size, passage 전체 개수)
+        dot_prod_scores = torch.matmul(q_emb, torch.transpose(self.p_embedding, 0, 1))
+        rank = torch.argsort(dot_prod_scores, dim=-1, descending=True)  # rank: (batch_size, passage 전체 개수)
+        if rank.size(0) > 1:
+            rank = rank.squeeze()
         return rank[:, :k]
+
+    def measure_performance(self, passages: List[str], questions: List[str], topk: int):
+        """mesaure performance of retriever. passages should be the same passages that were used to build self.p_embedding
+
+        Args:
+            passages (List[str]): passage list
+            questions (List[str]): question list
+            topk (int): top-k개의 document를 뽑아낼 때 뽑아낼 document 개수
+        """
+        matched = 0
+        for question, answer_passage in tqdm(
+            zip(questions, passages), total=len(questions), desc="calculating retrieval performance"
+        ):
+            tokenized_question = self.tokenizer(
+                question, max_length=512, truncation=True, padding="max_length", return_tensors="pt"
+            )
+            retrieved_doc_indices = self.get_relevant_doc(tokenized_question, topk)[0]
+            retrieved_passages = [passages[idx] for idx in retrieved_doc_indices]
+            if answer_passage in retrieved_passages:
+                matched += 1
+        percentage = matched / len(questions)
+        print(f"successful retrieval percentage : {percentage}")
+        return percentage

@@ -53,9 +53,7 @@ class ProjectDataset(Dataset):
             dataset = pickle.load(f)
         self.context = dataset["passage"].values.tolist()
         self.question = dataset["query"].values.tolist()
-        self.answers = dataset[
-            "annotation"
-        ].values.tolist()  # answers = {'answer_start': List[int], 'text': List[text]}
+        self.answers = dataset["annotation"].values.tolist()
         self.sep_token = sep_token
 
     def __len__(self):
