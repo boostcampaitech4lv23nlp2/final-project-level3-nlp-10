@@ -16,7 +16,7 @@ def collate_fn(batch):
     return batch
 
 
-def train(conf):
+def train(conf, emb_type="train"):
     # train_dataset = load_dataset("klue", "mrc")["train"]
     reader_tokenizer = AutoTokenizer.from_pretrained(conf.fid.encoder_tokenizer)
     train_dataset = ProjectDataset(conf.common.dataset_path, "train", reader_tokenizer.sep_token)

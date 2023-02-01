@@ -3,7 +3,9 @@ import os
 import torch
 import wandb
 from data.make_dataset import ProjectDataset
-from model.models import BertEncoder, FiD
+from datasets import load_metric
+from model.models import FiD
+from model.retriever import DPRContextEncoder, DPRQuestionEncoder
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -15,7 +17,7 @@ def collate_fn(batch):
     return batch
 
 
-def fid_train(conf):
+def fid_train(conf, emb_type="train"):
     tokenizer = AutoTokenizer.from_pretrained(conf.fid.encoder_tokenizer)
     train_dataset = ProjectDataset(conf.common.dataset_path, "train", tokenizer.sep_token)
     valid_dataset = ProjectDataset(conf.common.dataset_path, "valid", tokenizer.sep_token)
@@ -40,21 +42,24 @@ def fid_train(conf):
         weight_decay=0.01,
     )
 
-    q_encoder = BertEncoder.from_pretrained(conf.fid.q_encoder_path)
-    p_encoder = BertEncoder.from_pretrained(conf.fid.p_encoder_path)
+    # q_encoder = BertEncoder.from_pretrained(conf.fid.q_encoder_path)
+    # p_encoder = BertEncoder.from_pretrained(conf.fid.p_encoder_path)
+    q_encoder = DPRQuestionEncoder.from_pretrained("EJueon/keyword_dpr_question_encoder")
+    p_encoder = DPRContextEncoder.from_pretrained("EJueon/keyword_dpr_context_encoder")
     reader_tokenizer = AutoTokenizer.from_pretrained(conf.fid.reader_model)
 
-    if conf.dpr.emb_type == "train":
+    if emb_type == "train":
         emb_path = conf.dpr.emb_train_path
         emb_dataset = train_dataset
-    elif conf.dpr.emb_type == "valid":
+    elif emb_type == "valid":
         emb_path = conf.dpr.emb_valid_path
         emb_dataset = valid_dataset
-    elif conf.dpr.emb_type == "all":
+    elif emb_type == "all":
         emb_path = conf.dpr.emb_all_path
         # TODO dataset for all
     else:
         raise Exception("Unsupported emb_type in config.yaml")
+
     retriever = DenseRetrieval(
         args=args,
         dataset=emb_dataset,
@@ -70,12 +75,16 @@ def fid_train(conf):
     basemodel_config = AutoConfig.from_pretrained(conf.fid.reader_model)
     model = FiD.from_path(model_config=basemodel_config, config=conf)
     model.load_pretrained_params(conf.fid.reader_model)
+
+    blue_metric = load_metric("bleu")
+    rouge_metric = load_metric("rouge")
+
     # Train
     model.to(args.device)
     optimizer = AdamW(model.parameters(), lr=conf.common.learning_rate)
-    for epoch in range(1, conf.common.num_train_epochs):
+    predicted_list = []
+    for epoch in range(1, conf.common.num_train_epochs + 1):
         total_loss = 0
-
         # Train
         model.to(args.device)
         model.train()
@@ -117,19 +126,23 @@ def fid_train(conf):
             attention_mask = torch.stack([item["attention_mask"] for item in inputs], dim=0).to(args.device)
             labels = torch.stack([item["input_ids"] for item in labels]).squeeze().to(args.device)
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            wandb.log({"train_loss": outputs["loss"]})
+            wandb.log({"train/loss": outputs["loss"]})
             outputs["loss"].backward()
             optimizer.step()
+            calculate_metrics(
+                bleu_metric=blue_metric,
+                rouge_metric=rouge_metric,
+                tokenizer=reader_tokenizer,
+                logits=outputs["logits"],
+                labels=labels,
+            )
             total_loss += outputs["loss"].detach().cpu()  # gpu에 있는 상태로 total_loss에 더하면 gpu 메모리에 누적됨
+
         mean_loss = total_loss / len(train_dataloader)
-        wandb.log({"train_mean_loss": mean_loss})
+        wandb.log({"train/mean_loss": mean_loss})
+        log_metrics(bleu_metric=blue_metric, rouge_metric=rouge_metric, run_type="train")
 
         # Validation
-        """
-        del input_ids
-        del attention_mask
-        del labels
-        """
         torch.cuda.empty_cache()
         valid_device = args.device
         valid_total_loss = 0
@@ -173,11 +186,66 @@ def fid_train(conf):
                 attention_mask = torch.stack([item["attention_mask"] for item in inputs], dim=0).to(valid_device)
                 labels = torch.stack([item["input_ids"] for item in labels]).squeeze().to(valid_device)
                 outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-                wandb.log({"valid_loss": outputs["loss"]})
+                wandb.log({"valid/loss": outputs["loss"]})
+                calculate_metrics(
+                    bleu_metric=blue_metric,
+                    rouge_metric=rouge_metric,
+                    tokenizer=reader_tokenizer,
+                    logits=outputs["logits"],
+                    labels=labels,
+                )
                 valid_total_loss += outputs["loss"].detach().cpu()
             valid_mean_loss = valid_total_loss / len(valid_dataloader)
-            wandb.log({"valid_mean_loss": valid_mean_loss})
+            wandb.log({"valid/mean_loss": valid_mean_loss})
+            log_metrics(bleu_metric=blue_metric, rouge_metric=rouge_metric, run_type="valid")
+        model.save_pretrained(os.path.join(conf.fid.model_save_path, "pretrained"))
+        print_summarize_example(model, reader_tokenizer, input_ids, attention_mask, labels, predicted_list)
 
     model.save_pretrained(os.path.join(conf.fid.model_save_path, "pretrained"))
     torch.save(model, os.path.join(conf.fid.model_save_path, "model.pt"))
     print(f"saved at {conf.fid.model_save_path}")
+
+
+def calculate_metrics(bleu_metric, rouge_metric, tokenizer, logits, labels):
+    preds = torch.argmax(logits, dim=-1)
+    preds = [tokenizer.decode(pred, skip_special_tokens=True).split() for pred in preds]
+    labels = [[tokenizer.decode(label, skip_special_tokens=True).split()] for label in labels]
+    bleu_metric.add_batch(predictions=preds, references=labels)
+    rouge_metric.add_batch(predictions=preds, references=labels)
+
+
+def log_metrics(bleu_metric, rouge_metric, run_type="train"):
+    bleu_score = bleu_metric.compute()["bleu"]
+    rouge_scores = rouge_metric.compute()
+    rouge1 = rouge_scores["rouge1"].mid
+    rouge2 = rouge_scores["rouge2"].mid
+
+    wandb.log(
+        {
+            f"{run_type}/train_bleu": bleu_score,
+            f"{run_type}/train_rouge1_precision": rouge1.precision,
+            f"{run_type}/train_rouge1_recall": rouge1.recall,
+            f"{run_type}/train_rouge1_f-score": rouge1.fmeasure,
+            f"{run_type}/train_rouge2_precision": rouge2.precision,
+            f"{run_type}/train_rouge2_recall": rouge2.recall,
+            f"{run_type}/train_rouge2_f-score": rouge2.fmeasure,
+        }
+    )
+
+
+def print_summarize_example(model, reader_tokenizer, input_ids, attention_mask, labels, predicted_list):
+    print("question")
+    print(input_ids[0].size())
+    print(reader_tokenizer.decode(input_ids[0][0], skip_special_tokens=True))  # decoder에는 1차원 텐서 입력
+    print("predicted")
+    # generate에는 (batch_size, topk, max_seq) 크기의 3차원 텐서 입력
+    predicted_list.append(
+        reader_tokenizer.decode(
+            model.generate(input_ids[0].unsqueeze(0), attention_mask[0].unsqueeze(0), max_length=70)[0],
+            skip_special_tokens=True,
+        )
+    )
+    for pred in predicted_list:
+        print(pred)
+    print("answer")
+    print(reader_tokenizer.decode(labels[0], skip_special_tokens=True))

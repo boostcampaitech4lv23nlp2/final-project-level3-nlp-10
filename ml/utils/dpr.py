@@ -72,11 +72,13 @@ class DenseRetrieval:
                 input_ids = tokenized_embs["input_ids"][i:end]
                 attention_mask = tokenized_embs["attention_mask"][i:end]
                 token_type_ids = tokenized_embs["token_type_ids"][i:end]
-                self.p_embedding[i:end] = self.p_encoder(input_ids, attention_mask, token_type_ids).detach().cpu()
+                self.p_embedding[i:end] = (
+                    self.p_encoder(input_ids, attention_mask, token_type_ids).pooler_output.detach().cpu()
+                )
 
             with open(emb_path, "wb") as file:
                 pickle.dump(self.p_embedding, file)
-            print("embedding pickle saved.")
+            print(f"embedding pickle saved at {emb_path}.")
 
     def get_passage_by_indices(self, top_docs):
         """
@@ -99,7 +101,8 @@ class DenseRetrieval:
         # CORPUS를 np.array로 변환해줍니다.
         corpus = np.array(list(set(self.passages)))
         p_with_neg = []
-
+        print(f"corpus len {len(corpus)}")
+        print(f"passages len {len(self.passages)}")
         cnt = 0
         pbar = tqdm(self.passages, desc="in-batch negative sampling")
         for c in pbar:
@@ -115,7 +118,6 @@ class DenseRetrieval:
                 else:
                     cnt += 1
                     pbar.set_postfix_str(f"failed matching cnt : {cnt}")
-        print(f"total {len(p_with_neg)} passages for p_seq")
 
         # 2. (Question, Passage) 데이터셋 만들어주기
         q_seqs = tokenizer(dataset.question, padding="max_length", max_length=512, truncation=True, return_tensors="pt")
@@ -143,7 +145,9 @@ class DenseRetrieval:
         self.set_passage_dataloader()
 
     def set_passage_dataloader(self):
-        valid_seqs = self.tokenizer(self.dataset.context, padding="max_length", truncation=True, return_tensors="pt")
+        valid_seqs = self.tokenizer(
+            self.dataset.context, padding="max_length", max_length=512, truncation=True, return_tensors="pt"
+        )
         passage_dataset = TensorDataset(
             valid_seqs["input_ids"], valid_seqs["attention_mask"], valid_seqs["token_type_ids"]
         )
@@ -263,7 +267,7 @@ class DenseRetrieval:
         self.q_encoder.eval()
         with torch.no_grad():
             tokenized_query = tokenized_query.to(device)
-            q_emb = self.q_encoder(**tokenized_query).to("cpu")  # (num_query=1, emb_dim)
+            q_emb = self.q_encoder(**tokenized_query).pooler_output.to("cpu")  # (num_query=1, emb_dim)
 
         dot_prod_scores = torch.matmul(q_emb, torch.transpose(self.p_embedding, 0, 1))
         rank = torch.argsort(dot_prod_scores, dim=-1, descending=True)  # rank: (batch_size, passage 전체 개수)

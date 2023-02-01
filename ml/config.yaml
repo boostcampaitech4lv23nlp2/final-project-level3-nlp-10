@@ -4,15 +4,16 @@ common:
   learning_rate: 5e-5
   num_train_epochs: 2
   dataset_path: /opt/ml/final-project-level3-nlp-10/ml/data/project_dataset
+  metric: 
 wandb:
-  #project_name: Final_FiD_train
-  project_name: Final_FiD_trial
+  project_name: FiD_research
+  #project_name: Final_DPR_train
   entity_name: boost2end
 dpr:
-  emb_type: valid # [train, valid, all] 중 어떤 dataset으로 embedding passage들을 사용할 지 선택.
-  emb_train_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/train
-  emb_valid_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/valid
-  emb_all_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/all
+  #emb_type: train # [train, valid, all] 중 어떤 dataset으로 embedding passage들을 사용할 지 선택.
+  emb_train_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project_Em/train/
+  emb_valid_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/valid/san_with_project
+  emb_all_path: /opt/ml/final-project-level3-nlp-10/ml/data/dense_embeddings/project/all/san_with_project
   encoder_tokenizer: klue/bert-base
   model_name: klue/bert-base
   do_eval: True
@@ -24,8 +25,10 @@ dpr:
 
 fid:
   encoder_tokenizer: klue/bert-base
-  p_encoder_path: model/saved_models/klue_bert-base/p_encoder
-  q_encoder_path: model/saved_models/klue_bert-base/q_encoder
+  #p_encoder_path: model/saved_models/klue_bert-base/p_encoder
+  #q_encoder_path: model/saved_models/klue_bert-base/q_encoder
+  p_encoder_path: model/saved_models/dpr/project/klue_bert-base/p_encoder
+  q_encoder_path: model/saved_models/dpr/project/klue_bert-base/q_encoder
   model_save_path: model/saved_models/fid/
   reader_model: alaggung/bart-r3f
   topk: 5

@@ -34,9 +34,9 @@ if __name__ == "__main__":
 
     if sys_args.option == "dpr":
         if sys_args.type == "train":
-            dpr_train(conf)
+            dpr_train(conf, sys_args.type)
     elif sys_args.option == "fid":
         if sys_args.type == "train":
-            fid_train(conf)
+            fid_train(conf, sys_args.type)
         else:
             pass
