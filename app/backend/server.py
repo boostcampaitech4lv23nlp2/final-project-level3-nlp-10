@@ -3,6 +3,7 @@ from typing import List
 import uvicorn
 from api import CSR
 from fastapi import APIRouter, FastAPI, File
+from keybert import keybert_keyword
 
 app = FastAPI()
 stt_router = APIRouter(prefix="/stt")
@@ -33,6 +34,12 @@ async def get_stt(files: List[bytes] = File(...)):
 async def save_stt_text(files: List[str]):
     print(files)
     return {"test": "STT"}
+
+
+@app.post("/keyword/")
+async def get_keyword(text: str):
+    keywords = keybert_keyword(text, 5)
+    return keywords
 
 
 if __name__ == "__main__":

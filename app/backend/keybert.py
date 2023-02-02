@@ -101,7 +101,7 @@ def mmr(doc_embedding, candidate_embeddings, words, top_n, diversity):
         return "None"
 
 
-def get_keyword(text: str, top_n: int = 5):
+def keybert_keyword(text: str, top_n: int = 5):
     candidates = get_candidates(text)
     doc_embedding, candidate_embeddings = load_embeddings(text, candidates)
 
