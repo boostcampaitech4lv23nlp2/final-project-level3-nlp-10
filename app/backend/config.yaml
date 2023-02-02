@@ -1,0 +1,6 @@
+topk: 5
+
+fid:
+  retriever_tokenizer: klue/bert-base
+  reader_tokenizer: klue/bert-base
+  model_path: saved_models/FiD/pretrained
