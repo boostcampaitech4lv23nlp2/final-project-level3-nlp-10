@@ -8,6 +8,7 @@ class FiDEncoder(nn.Module):
     def __init__(self, encoder):
         super().__init__()
         self.encoder = encoder
+        self.n_passages = 0
 
     def forward(self, input_ids=None, attention_mask=None, **kwargs):
         # passage_length = input_ids.size(-1)
@@ -33,6 +34,7 @@ class FiD(BartForConditionalGeneration):
         else:
             super().__init__()
         self.wrap_encoder(self.model.encoder)
+        self.temp = 5
 
     def load_pretrained_params(self, basemodel_name):
         basemodel = AutoModelForSeq2SeqLM.from_pretrained(basemodel_name)
@@ -77,6 +79,8 @@ class FiD(BartForConditionalGeneration):
         return super().forward(input_ids=input_ids, attention_mask=attention_mask, labels=labels, **kwargs)
 
     def generate(self, input_ids, attention_mask, max_length=256):
+        if input_ids is not None and input_ids.ndim == 3:
+            self.model.encoder.n_passages = input_ids.size(1)
         return super().generate(
             inputs=input_ids.view(input_ids.size(0), -1),
             attention_mask=attention_mask.view(attention_mask.size(0), -1),
