@@ -1,4 +1,5 @@
 import itertools
+from functools import lru_cache
 
 import numpy as np
 from konlpy.tag import Mecab
@@ -7,9 +8,15 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-def load_embeddings(text, candidates):
-    model = SentenceTransformer("sentence-transformers/xlm-r-100langs-bert-base-nli-stsb-mean-tokens")
+@lru_cache
+def load_sbert(model_name):
+    model = SentenceTransformer(model_name)
     _ = model.eval()
+    return model
+
+
+def load_embeddings(text, candidates):
+    model = load_sbert("sentence-transformers/xlm-r-100langs-bert-base-nli-stsb-mean-tokens")
 
     doc_embedding = model.encode([text])
     candidate_embeddings = model.encode(candidates)
