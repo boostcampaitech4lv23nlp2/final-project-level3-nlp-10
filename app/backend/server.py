@@ -1,7 +1,7 @@
 from typing import List
 
 import uvicorn
-from app_utils import load_model, load_retriever, load_stt_model, summarize_fid
+from app_utils import load_model, load_retriever, load_stt_model, predict_stt, summarize_fid
 from fastapi import FastAPI, File
 
 app = FastAPI()
@@ -13,6 +13,9 @@ def startup_event():
     load_model(model_type="fid")
     load_retriever()
     print("FiD model loaded")
+    load_stt_model()
+    print("success to loading whisper model")
+
     summarize_fid(["앙팡", "두유", "서울우유"])
 
 
@@ -27,9 +30,10 @@ def read_root():
 
 
 @app.post("/stt/")
-async def get_stt(files: List[bytes] = File(...)):
-    model = load_stt_model()
-    result = model.transcribe("./data/피어세션 2023-01-31 수정.mp3")
+async def get_stt(files: List[bytes] = File()):
+    for file in files:
+        result = predict_stt(file)
+        print(result)
     return result
 
 
