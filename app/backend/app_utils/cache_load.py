@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from app_utils.key_bert import KeywordBert
 from model.models import FiD
 from model.retriever import DPRContextEncoder, DPRQuestionEncoder
 from model.retriever import FiD_DenseRetrieval as FiD_DPR
@@ -13,6 +14,8 @@ conf = OmegaConf.load("./config.yaml")
 def load_model(model_type):
     if model_type == "fid":
         return FiD.from_pretrained(conf.fid.model_path)
+    if model_type == "sbert":
+        return KeywordBert()
 
 
 @lru_cache
