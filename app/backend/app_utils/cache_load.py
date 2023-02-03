@@ -36,3 +36,10 @@ def load_tokenizer():
 @lru_cache
 def load_stt_model():
     return whisper.load_model("large")
+
+
+@lru_cache
+def load_sbert():
+    from sentence_transformers import SentenceTransformer
+
+    return SentenceTransformer("jhgan/ko-sroberta-multitask")
