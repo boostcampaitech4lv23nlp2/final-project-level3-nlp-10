@@ -2,6 +2,8 @@ from typing import List
 
 import uvicorn
 from api import CSR
+from app_utils.cache_load import load_model, load_retriever
+from app_utils.inference import summarize_fid
 from fastapi import APIRouter, FastAPI, File
 
 app = FastAPI()
@@ -11,6 +13,10 @@ stt_router = APIRouter(prefix="/stt")
 @app.on_event("startup")
 def startup_event():
     print("Start Boost2Note Server")
+    load_model(model_type="fid")
+    load_retriever()
+    print("FiD model loaded")
+    summarize_fid(["앙팡", "두유", "서울우유"])
 
 
 @app.on_event("shutdown")
