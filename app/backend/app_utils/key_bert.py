@@ -1,5 +1,4 @@
 import itertools
-from functools import lru_cache
 
 import numpy as np
 from konlpy.tag import Mecab
@@ -8,23 +7,9 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-@lru_cache
-def load_sbert(model_name):
-    model = SentenceTransformer(model_name)
-    _ = model.eval()
-    return model
-
-
-def load_embeddings(text, candidates):
-    model = load_sbert("sentence-transformers/xlm-r-100langs-bert-base-nli-stsb-mean-tokens")
-
-    doc_embedding = model.encode([text])
-    candidate_embeddings = model.encode(candidates)
-    return doc_embedding, candidate_embeddings
-
-
 def get_candidates(text):
     mecab = Mecab()
+
     tokenized_doc = mecab.pos(text)
     tokenized_nouns = " ".join(
         [word[0] for word in tokenized_doc if word[1] in ["NNP", "NNG", "SL"]]
@@ -66,7 +51,7 @@ def max_sum_sim(doc_embedding, candidate_embeddings, words, top_n, nr_candidates
         keywords = [words_vals[idx] for idx in candidate]
         return keywords
     else:
-        return None
+        return []
 
 
 def mmr(doc_embedding, candidate_embeddings, words, top_n, diversity):
@@ -90,6 +75,8 @@ def mmr(doc_embedding, candidate_embeddings, words, top_n, diversity):
     # 최고의 키워드는 이미 추출했으므로 top_n-1번만큼 아래를 반복.
     # ex) top_n = 5라면, 아래의 loop는 4번 반복됨.
     for _ in range(top_n - 1):
+        if len(candidates_idx) == 0:
+            break
         candidate_similarities = word_doc_similarity[candidates_idx, :]
         target_similarities = np.max(word_similarity[candidates_idx][:, keywords_idx], axis=1)
 
@@ -105,22 +92,35 @@ def mmr(doc_embedding, candidate_embeddings, words, top_n, diversity):
         keywords = [words[idx] for idx in keywords_idx]
         return keywords
     else:
-        return "None"
+        return []
 
 
-def keybert_keyword(text: str, top_n: int = 5):
-    candidates = get_candidates(text)
-    doc_embedding, candidate_embeddings = load_embeddings(text, candidates)
+class KeywordBert:
+    def __init__(self):
+        super().__init__()
+        self.model = SentenceTransformer("sentence-transformers/xlm-r-100langs-bert-base-nli-stsb-mean-tokens")
+        _ = self.model.eval()
 
-    results = list()
-    results.append(dist_keywords(doc_embedding, candidate_embeddings, candidates, top_n=top_n))
-    results.append(max_sum_sim(doc_embedding, candidate_embeddings, candidates, top_n=top_n, nr_candidates=top_n * 2))
-    results.append(mmr(doc_embedding, candidate_embeddings, candidates, top_n=top_n, diversity=0.8))
+    def load_embeddings(self, text, candidates):
+        doc_embedding = self.model.encode([text])
+        candidate_embeddings = self.model.encode(candidates)
+        return doc_embedding, candidate_embeddings
 
-    unique_keywords = []
-    for result in results:
-        unique_keywords.extend(result)
+    def extract_keyword(self, text: str, top_n: int = 5):
+        candidates = get_candidates(text)
+        doc_embedding, candidate_embeddings = self.load_embeddings(text, candidates)
 
-    keyword = list(set(unique_keywords))
+        results = list()
+        results.append(dist_keywords(doc_embedding, candidate_embeddings, candidates, top_n=top_n))
+        results.append(
+            max_sum_sim(doc_embedding, candidate_embeddings, candidates, top_n=top_n, nr_candidates=top_n * 2)
+        )
+        results.append(mmr(doc_embedding, candidate_embeddings, candidates, top_n=top_n, diversity=0.8))
 
-    return keyword
+        unique_keywords = []
+        for result in results:
+            unique_keywords.extend(result)
+
+        keyword = list(set(unique_keywords))
+
+        return keyword
