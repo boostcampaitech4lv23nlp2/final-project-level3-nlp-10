@@ -2,6 +2,8 @@ from typing import List
 
 import uvicorn
 from api import CSR
+from app_utils.cache_load import load_model, load_retriever
+from app_utils.inference import summarize_fid
 from fastapi import APIRouter, FastAPI, File
 from keybert import keybert_keyword
 
@@ -12,6 +14,10 @@ stt_router = APIRouter(prefix="/stt")
 @app.on_event("startup")
 def startup_event():
     print("Start Boost2Note Server")
+    load_model(model_type="fid")
+    load_retriever()
+    print("FiD model loaded")
+    summarize_fid(["앙팡", "두유", "서울우유"])
 
 
 @app.on_event("shutdown")
@@ -34,6 +40,11 @@ async def get_stt(files: List[bytes] = File(...)):
 async def save_stt_text(files: List[str]):
     print(files)
     return {"test": "STT"}
+
+
+@app.post("/summarize/")
+async def summarize_text(files: List[str]):
+    print(files)
 
 
 @app.post("/keyword/")

@@ -103,7 +103,9 @@ with con2:
     options = st.multiselect("주요 키워드", list(queue), ["nnew"])
     con8, _ = st.columns([0.8, 0.2])
     with con8:
-        st.button("요약하기", key="summarization")
+        if st.button("요약하기", key="summarization"):
+            response = requests.post("http://localhost:8000/summarize", files=options)
+
     for i in range(3):
         with st.expander("? 키워드 요약", expanded=True):
             st.markdown(
