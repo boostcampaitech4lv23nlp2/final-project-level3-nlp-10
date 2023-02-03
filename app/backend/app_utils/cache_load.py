@@ -1,8 +1,7 @@
 from functools import lru_cache
 
-from model.models import FiD
-from model.retriever import DPRContextEncoder, DPRQuestionEncoder
-from model.retriever import FiD_DenseRetrieval as FiD_DPR
+import whisper
+from model import DPRContextEncoder, DPRQuestionEncoder, FiD, FiD_DPR
 from omegaconf import OmegaConf
 from transformers import AutoTokenizer
 
@@ -32,3 +31,8 @@ def load_tokenizer():
     reader_tokenizer = AutoTokenizer.from_pretrained(conf.fid.reader_tokenizer)
 
     return (retriever_tokenizer, reader_tokenizer)
+
+
+@lru_cache
+def load_stt_model():
+    return whisper.load_model("large")
