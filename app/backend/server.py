@@ -4,8 +4,8 @@ import uvicorn
 from api import CSR
 from app_utils.cache_load import load_model, load_retriever
 from app_utils.inference import summarize_fid
+from app_utils.key_bert import KeywordBert
 from fastapi import APIRouter, FastAPI, File
-from keybert import keybert_keyword
 
 app = FastAPI()
 stt_router = APIRouter(prefix="/stt")
@@ -15,6 +15,7 @@ stt_router = APIRouter(prefix="/stt")
 def startup_event():
     print("Start Boost2Note Server")
     load_model(model_type="fid")
+    load_model(model_type="sbert")
     load_retriever()
     print("FiD model loaded")
     summarize_fid(["앙팡", "두유", "서울우유"])
@@ -48,8 +49,8 @@ async def summarize_text(files: List[str]):
 
 
 @app.post("/keyword/")
-async def get_keyword(text: str):
-    keywords = keybert_keyword(text, 5)
+def get_keyword(text: str):
+    keywords = KeywordBert.extract_keyword(text, 5)
     return keywords
 
 
