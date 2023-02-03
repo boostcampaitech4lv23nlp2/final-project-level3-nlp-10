@@ -1,13 +1,10 @@
 from typing import List
 
 import uvicorn
-from api import CSR
-from app_utils.cache_load import load_model, load_retriever
-from app_utils.inference import summarize_fid
-from fastapi import APIRouter, FastAPI, File
+from app_utils import load_model, load_retriever, load_stt_model, summarize_fid
+from fastapi import FastAPI, File
 
 app = FastAPI()
-stt_router = APIRouter(prefix="/stt")
 
 
 @app.on_event("startup")
@@ -31,14 +28,9 @@ def read_root():
 
 @app.post("/stt/")
 async def get_stt(files: List[bytes] = File(...)):
-    result = CSR(files[0])
+    model = load_stt_model()
+    result = model.transcribe("./data/피어세션 2023-01-31 수정.mp3")
     return result
-
-
-@app.post("/save/")
-async def save_stt_text(files: List[str]):
-    print(files)
-    return {"test": "STT"}
 
 
 @app.post("/summarize/")
