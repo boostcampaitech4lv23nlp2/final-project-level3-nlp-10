@@ -41,5 +41,10 @@ async def save_stt_text(files: List[str]):
     return {"test": "STT"}
 
 
+@app.post("/summarize/")
+async def summarize_text(files: List[str]):
+    print(files)
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
