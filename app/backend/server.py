@@ -12,6 +12,10 @@ class Keywords(BaseModel):
     keywords: list
 
 
+class SummarizeResponse(BaseModel):
+    summarization: list
+
+
 @app.on_event("startup")
 def startup_event():
     print("Start Boost2Note Server")
@@ -45,11 +49,12 @@ async def get_passages(files: List[bytes] = File()) -> List[List[str]]:
 
 
 @app.post("/summarize")
-async def summarize_text(keywords: Keywords):
+async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
     dict_keys = dict(keywords)
     print(dict_keys)
     output = summarize_fid(dict_keys["keywords"], debug=True, renew_emb=False)
-    print(output)
+    ret = [output, "2nd", "3rd"]
+    return ret
 
 
 if __name__ == "__main__":

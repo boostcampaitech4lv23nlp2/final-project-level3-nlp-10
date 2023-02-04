@@ -1,3 +1,4 @@
+import json
 import sys
 import time
 from collections import deque
@@ -28,10 +29,10 @@ def wait_msg(msg, wait=3, type_="warning"):
     placeholder.empty()
 
 
-def call(con, expanders):
+def call(con, expanders, contents):
     with con:
-        for expander in expanders:
-            expander.markdown("changed")
+        for expander, content in zip(expanders, contents):
+            expander.markdown(content)
 
 
 if "filename" not in st.session_state:
@@ -107,10 +108,11 @@ with con2:
     expanders = []
     for i in range(3):
         expander = st.expander("? 키워드 요약", expanded=True)
-        expander.markdown("asddsf")
+        # expander.markdown("asddsf")
         expanders.append(expander)
 
     with con8:
         if st.button("요약하기", key="summarization"):
-            call(con2, expanders)
             response = requests.post("http://localhost:8000/summarize", json={"keywords": options})
+            json_res = json.loads(response.text)  # json_res : list
+            call(con2, expanders, json_res)
