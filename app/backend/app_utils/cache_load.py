@@ -1,6 +1,7 @@
 from functools import lru_cache
 
 import whisper
+from app_utils.key_bert import KeywordBert
 from model import DPRContextEncoder, DPRQuestionEncoder, FiD, FiD_DPR
 from omegaconf import OmegaConf
 from transformers import AutoTokenizer
@@ -12,6 +13,8 @@ conf = OmegaConf.load("./config.yaml")
 def load_model(model_type):
     if model_type == "fid":
         return FiD.from_pretrained(conf.fid.model_path)
+    if model_type == "sbert":
+        return KeywordBert()
 
 
 @lru_cache

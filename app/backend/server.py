@@ -2,6 +2,7 @@ from typing import List
 
 import uvicorn
 from app_utils import load_model, load_retriever, load_sbert, load_stt_model, predict_stt, split_passages, summarize_fid
+from app_utils.key_bert import KeywordBert
 from fastapi import FastAPI, File
 
 app = FastAPI()
@@ -11,6 +12,7 @@ app = FastAPI()
 def startup_event():
     print("Start Boost2Note Server")
     load_model(model_type="fid")
+    load_model(model_type="sbert")
     load_retriever()
     print("FiD model loaded")
     load_stt_model()
@@ -44,6 +46,12 @@ async def get_passages(files: List[bytes] = File()) -> List[List[str]]:
 @app.post("/summarize/")
 async def summarize_text(files: List[str]):
     print(files)
+
+
+@app.post("/keyword/")
+def get_keyword(text: str):
+    keywords = KeywordBert.extract_keyword(text, 5)
+    return keywords
 
 
 if __name__ == "__main__":
