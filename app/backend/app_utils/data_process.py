@@ -1,6 +1,8 @@
 import json
 
-from app_utils.cache_load import load_retriever
+import torch
+import torch.nn.functional as F
+from app_utils.cache_load import load_retriever, load_sbert
 
 
 def convert2context(json_path):
@@ -38,3 +40,54 @@ def create_context_embedding(record_path):
     retriever = load_retriever()
     retriever.passages = convert2context(record_path)
     retriever.create_passage_embeddings(renew_emb=True)
+
+
+def get_sentence_embedding(model, text: list, batch_size: int = 16):
+    embeddings = []
+    for i in range(0, len(text), batch_size):
+        print(i)
+        with torch.no_grad():
+            embedding = model.encode(
+                sentences=text[i : batch_size * (i + 1)],
+                batch_size=batch_size,
+                show_progress_bar=True,
+                convert_to_tensor=True,
+                device="cuda:0",
+            )
+            embeddings.append(embedding.cpu())
+    return torch.cat(embeddings).squeeze()
+
+
+def split_passages(segments, threshold=0.5):
+    if len(segments) <= 1:
+        return segments[0]["text"]
+    passages = []
+    for segment in segments:
+        passages.append(segment["text"])
+    model = load_sbert()
+    embedding = get_sentence_embedding(model=model, text=passages, batch_size=16)
+    emb_len = len(embedding)
+    sim_matrix = torch.zeros((emb_len, emb_len), dtype=torch.float32)
+
+    for i in range(emb_len):
+        sim = F.cosine_similarity(embedding[[i]], embedding)
+        sim_matrix[i] += sim
+    sim_matrix = sim_matrix.numpy()
+    print(sim_matrix)
+    splits = [-1] * len(sim_matrix)
+    for j in range(emb_len):
+        for i in range(j, emb_len):
+            if sim_matrix[j][i] > threshold and splits[i] == -1:
+                splits[i] = j
+
+    re_passages = []
+    split = splits[0]
+    passage = ""
+    for s, p in zip(splits, passages):
+        if split == s:
+            passage += p
+        else:
+            re_passages.append(passage)
+            passage = p
+    re_passages.append(passage)
+    return re_passages

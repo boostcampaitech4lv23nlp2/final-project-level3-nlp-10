@@ -26,7 +26,7 @@ def wait_msg(msg, wait=3, type_="warning"):
     placeholder.empty()
 
 
-if "success" not in st.session_state:
+if "success" not in st.session_state:  # stt 및 문단화 성공에 대한 session state
     st.session_state["success"] = False
     st.session_state["stt"] = ""
 
@@ -40,7 +40,6 @@ with st.sidebar:
 
 with con1:
     upload_tab, record_tab = st.tabs(["녹음본 업로드", "..."])
-
     with upload_tab:
         uploaded_files = st.file_uploader(
             "녹음 파일을 올려주세요.", key="file_uploader", accept_multiple_files=True, type=["wav", "mp4", "mp3"]
@@ -58,17 +57,14 @@ with con1:
                     result = response.json()
                     wait_msg(msg, 3, msg)
                 st.session_state["success"] = st.success("변환 완료")
-
         if st.session_state["success"]:
             with st.expander("STT 원본 텍스트", expanded=True):
                 if not st.session_state["stt"]:
                     st.session_state["stt"] = result
-
-                for data in st.session_state["stt"]:
-                    start = data["start"]
-                    end = data["end"]
-                    text = data["text"]
-                    st.write(f"{start}: {text}")
+                for stt_data in st.session_state["stt"]:
+                    for passage in stt_data:
+                        st.write(passage)
+                        st.write(" ")
 
                 # st.write(st.session_state["stt"])
                 # _, _, _, con5, con6 = st.columns([0.2, 0.2, 0.1, 0.3, 0.2])
@@ -78,11 +74,6 @@ with con1:
                 #         response = requests.post("http://localhost:8000/save", files=st.session_state["stt"])
                 #         label = response.json()
                 #         st.write(f"label is {label}")
-
-        # with st.container():
-        #     st.write("This is inside the container")
-        # if st.session_state.get("file_uploader") is not None:
-        #     st.warning("To use the Gallery, remove the uploaded image first.")
 
     with record_tab:
         st.write("record")
