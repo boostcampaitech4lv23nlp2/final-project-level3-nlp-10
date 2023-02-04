@@ -12,7 +12,7 @@ conf = OmegaConf.load("./config.yaml")
 @lru_cache
 def load_model(model_type):
     if model_type == "fid":
-        return FiD.from_pretrained(conf.fid.model_path)
+        return FiD.from_pretrained("mountinyy/FiD-kor-bart")
 
 
 @lru_cache
@@ -20,15 +20,16 @@ def load_retriever():
     q_encoder = DPRQuestionEncoder.from_pretrained("EJueon/keyword_dpr_question_encoder")
     p_encoder = DPRContextEncoder.from_pretrained("EJueon/keyword_dpr_context_encoder")
     tokenizer = load_tokenizer()[0]
-    retriver = FiD_DPR(
+    retriever = FiD_DPR(
         conf=conf, q_encoder=q_encoder, p_encoder=p_encoder, tokenizer=tokenizer, emb_save_path=conf.emb_save_path
     )
-    return retriver
+
+    return retriever
 
 
 @lru_cache
 def load_tokenizer():
     retriever_tokenizer = AutoTokenizer.from_pretrained(conf.fid.retriever_tokenizer)
-    reader_tokenizer = AutoTokenizer.from_pretrained(conf.fid.reader_tokenizer)
+    reader_tokenizer = AutoTokenizer.from_pretrained(conf.fid.reader_tokenizer)  # klue/bert-base
 
     return (retriever_tokenizer, reader_tokenizer)

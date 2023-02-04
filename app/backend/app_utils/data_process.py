@@ -29,7 +29,7 @@ def convert2context(json_path):
     return context
 
 
-def create_context_embedding(record_path):
+def create_context_embedding(record_path, renew_emb=True):
     """meeting record를 통해 새로운 embedding vector들을 계산하여 저장합니다.
 
     Args:
@@ -37,4 +37,4 @@ def create_context_embedding(record_path):
     """
     retriever = load_retriever()
     retriever.passages = convert2context(record_path)
-    retriever.create_passage_embeddings(renew_emb=True)
+    retriever.create_passage_embeddings(renew_emb=renew_emb)

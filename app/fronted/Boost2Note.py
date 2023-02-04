@@ -11,6 +11,8 @@ __all__ = ["streamlit_nested_layout"]
 sys.path.insert(0, ".")
 queue = deque()
 queue.append("nnew")
+queue.append("강의")
+queue.append("진도")
 st.set_page_config(layout="wide")
 
 
@@ -24,6 +26,12 @@ def wait_msg(msg, wait=3, type_="warning"):
     placeholder.warning(msg, icon="🤖")
     time.sleep(wait)
     placeholder.empty()
+
+
+def call(con, expanders):
+    with con:
+        for expander in expanders:
+            expander.markdown("changed")
 
 
 if "filename" not in st.session_state:
@@ -100,16 +108,19 @@ with con1:
     st.markdown("---")
 
 with con2:
-    options = st.multiselect("주요 키워드", list(queue), ["nnew"])
+    options = st.multiselect(
+        "주요 키워드",
+        list(queue),
+        ["nnew"],
+    )
     con8, _ = st.columns([0.8, 0.2])
+    expanders = []
+    for i in range(3):
+        expander = st.expander("? 키워드 요약", expanded=True)
+        expander.markdown("asddsf")
+        expanders.append(expander)
+
     with con8:
         if st.button("요약하기", key="summarization"):
-            response = requests.post("http://localhost:8000/summarize", files=options)
-
-    for i in range(3):
-        with st.expander("? 키워드 요약", expanded=True):
-            st.markdown(
-                """
-                adfsdf
-            """
-            )
+            call(con2, expanders)
+            response = requests.post("http://localhost:8000/summarize", json={"keywords": options})

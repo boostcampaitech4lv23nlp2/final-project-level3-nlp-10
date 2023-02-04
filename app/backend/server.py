@@ -5,9 +5,14 @@ from api import CSR
 from app_utils.cache_load import load_model, load_retriever
 from app_utils.inference import summarize_fid
 from fastapi import APIRouter, FastAPI, File
+from pydantic import BaseModel
 
 app = FastAPI()
 stt_router = APIRouter(prefix="/stt")
+
+
+class Keywords(BaseModel):
+    keywords: list
 
 
 @app.on_event("startup")
@@ -16,7 +21,6 @@ def startup_event():
     load_model(model_type="fid")
     load_retriever()
     print("FiD model loaded")
-    summarize_fid(["앙팡", "두유", "서울우유"])
 
 
 @app.on_event("shutdown")
@@ -41,9 +45,12 @@ async def save_stt_text(files: List[str]):
     return {"test": "STT"}
 
 
-@app.post("/summarize/")
-async def summarize_text(files: List[str]):
-    print(files)
+@app.post("/summarize")
+async def summarize_text(keywords: Keywords):
+    dict_keys = dict(keywords)
+    print(dict_keys)
+    output = summarize_fid(dict_keys["keywords"], debug=True, renew_emb=False)
+    print(output)
 
 
 if __name__ == "__main__":
