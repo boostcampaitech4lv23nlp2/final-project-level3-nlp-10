@@ -1,11 +1,26 @@
 from typing import List
 
 import uvicorn
-from app_utils import load_model, load_retriever, load_sbert, load_stt_model, predict_stt, split_passages, summarize_fid
-from app_utils.key_bert import KeywordBert
+from app_utils import (
+    get_keyword,
+    load_model,
+    load_retriever,
+    load_sbert,
+    load_stt_model,
+    predict_stt,
+    split_passages,
+    summarize_fid,
+)
 from fastapi import FastAPI, File
 from pydantic import BaseModel
 
+"""
+Mecab 설치
+    python3 -m pip install konlpy
+
+    sudo apt-get install curl git
+    bash <(curl -s https://raw.githubusercontent.com/konlpy/konlpy/master/scripts/mecab.sh)
+"""
 app = FastAPI()
 
 
@@ -46,8 +61,11 @@ async def get_passages(files: List[bytes] = File()) -> List[List[str]]:
         result = predict_stt(file)
         result = split_passages(result)
         results.append(result)
+    results = results[0]
     print(results)
-    return results
+    keywords = list(get_keyword(results))
+    print(keywords)
+    return [results, keywords]
 
 
 @app.post("/summarize")
@@ -57,12 +75,6 @@ async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
     output = summarize_fid(dict_keys["keywords"], debug=True, renew_emb=False)
     ret = [output, "2nd", "3rd"]
     return ret
-
-
-@app.post("/keyword/")
-def get_keyword(text: str):
-    keywords = KeywordBert.extract_keyword(text, 5)
-    return keywords
 
 
 if __name__ == "__main__":
