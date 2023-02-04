@@ -2,6 +2,7 @@ from typing import List
 
 import uvicorn
 from app_utils import load_model, load_retriever, load_sbert, load_stt_model, predict_stt, split_passages, summarize_fid
+from app_utils.key_bert import KeywordBert
 from fastapi import FastAPI, File
 from pydantic import BaseModel
 
@@ -20,6 +21,7 @@ class SummarizeResponse(BaseModel):
 def startup_event():
     print("Start Boost2Note Server")
     load_model(model_type="fid")
+    load_model(model_type="sbert")
     load_retriever()
     print("FiD model loaded")
     load_stt_model()
@@ -55,6 +57,12 @@ async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
     output = summarize_fid(dict_keys["keywords"], debug=True, renew_emb=False)
     ret = [output, "2nd", "3rd"]
     return ret
+
+
+@app.post("/keyword/")
+def get_keyword(text: str):
+    keywords = KeywordBert.extract_keyword(text, 5)
+    return keywords
 
 
 if __name__ == "__main__":
