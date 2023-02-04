@@ -43,11 +43,12 @@ class DenseRetrieval:
         else:
             del self.p_encoder
 
-    def create_passage_embeddings(self):
+    def create_passage_embeddings(self, renew_emb=False):
         pickle_name = "dense_embedding.bin"
+        os.makedirs(self.emb_save_path, exist_ok=True)
         emb_path = os.path.join(self.emb_save_path, pickle_name)
 
-        if os.path.isfile(emb_path):
+        if os.path.isfile(emb_path) and renew_emb is False:
             with open(emb_path, "rb") as file:
                 self.p_embedding = pickle.load(file)
             print("Embedding pickle load.")

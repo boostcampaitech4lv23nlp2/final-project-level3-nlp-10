@@ -12,7 +12,8 @@ from omegaconf import OmegaConf
 def get_args():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("--option", required=True, choices=["dpr", "fid"], help="어떤 방식의 모델을 돌릴지 선택")
-    arg_parser.add_argument("--type", default="train", choices=["train", "eval", "predict"], help="모델을 어떤 형식으로 돌릴지 선택")
+    arg_parser.add_argument("--type", default="train", choices=["train", "eval", "all"], help="모델을 어떤 형식으로 돌릴지 선택")
+    arg_parser.add_argument("--t5", default="False")
 
     return arg_parser.parse_args()
 
@@ -22,6 +23,15 @@ def set_seed(seed):
     torch.cuda.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+
+
+def parse_boolean(arg):
+    if arg in ["True", "true", "t", "T"]:
+        return True
+    elif arg in ["False", "false", "f", "F"]:
+        return False
+    else:
+        raise Exception("argument is not boolean")
 
 
 if __name__ == "__main__":
@@ -36,7 +46,4 @@ if __name__ == "__main__":
         if sys_args.type == "train":
             dpr_train(conf, sys_args.type)
     elif sys_args.option == "fid":
-        if sys_args.type == "train":
-            fid_train(conf, sys_args.type)
-        else:
-            pass
+        fid_train(conf, sys_args.type, parse_boolean(sys_args.t5))
