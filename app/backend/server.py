@@ -1,14 +1,11 @@
 from typing import List
 
 import uvicorn
-from api import CSR
-from app_utils.cache_load import load_model, load_retriever
-from app_utils.inference import summarize_fid
-from fastapi import APIRouter, FastAPI, File
+from app_utils import load_model, load_retriever, load_sbert, load_stt_model, predict_stt, split_passages, summarize_fid
+from fastapi import FastAPI, File
 from pydantic import BaseModel
 
 app = FastAPI()
-stt_router = APIRouter(prefix="/stt")
 
 
 class Keywords(BaseModel):
@@ -21,6 +18,9 @@ def startup_event():
     load_model(model_type="fid")
     load_retriever()
     print("FiD model loaded")
+    load_stt_model()
+    load_sbert()
+    print("success to loading whisper model")
 
 
 @app.on_event("shutdown")
@@ -34,15 +34,14 @@ def read_root():
 
 
 @app.post("/stt/")
-async def get_stt(files: List[bytes] = File(...)):
-    result = CSR(files[0])
-    return result
-
-
-@app.post("/save/")
-async def save_stt_text(files: List[str]):
-    print(files)
-    return {"test": "STT"}
+async def get_passages(files: List[bytes] = File()) -> List[List[str]]:
+    results = []
+    for file in files:
+        result = predict_stt(file)
+        result = split_passages(result)
+        results.append(result)
+    print(results)
+    return results
 
 
 @app.post("/summarize")
