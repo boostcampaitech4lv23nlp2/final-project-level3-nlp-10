@@ -42,13 +42,13 @@ def create_context_embedding(text_list: list, renew_emb=True):
     retriever.create_passage_embeddings(renew_emb=renew_emb)
 
 
-def get_sentence_embedding(model, text: list, batch_size: int = 16):
+def get_sentence_embedding(model, text: list, batch_size: int = 16) -> torch.Tensor:
     embeddings = []
-    for i in range(0, len(text), batch_size):
-        print(i)
+    n_batch = len(text) // batch_size + 1
+    for i in range(n_batch):
         with torch.no_grad():
             embedding = model.encode(
-                sentences=text[i : batch_size * (i + 1)],
+                sentences=text[batch_size * i : batch_size * (i + 1)],
                 batch_size=batch_size,
                 show_progress_bar=True,
                 convert_to_tensor=True,
