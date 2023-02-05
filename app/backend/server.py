@@ -19,9 +19,9 @@ from pydantic import BaseModel
 """
 Mecab 설치
     python3 -m pip install konlpy
-
     sudo apt-get install curl git
     bash <(curl -s https://raw.githubusercontent.com/konlpy/konlpy/master/scripts/mecab.sh)
+(참조: https://konlpy.org/en/latest/install/)
 """
 app = FastAPI()
 
