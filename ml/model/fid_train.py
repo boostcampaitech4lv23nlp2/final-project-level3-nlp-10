@@ -75,8 +75,8 @@ def fid_train(conf, emb_type="train", t5=False):
 
     model = set_model(conf, t5)
 
-    # blue_metric = load_metric("bleu")
-    blue_metric = None
+    blue_metric = load_metric("bleu")
+    # blue_metric = None
     rouge_metric = load_metric("rouge")
 
     os.makedirs(conf.fid.model_save_path, exist_ok=True)
@@ -230,7 +230,6 @@ def calculate_metrics(
     if bleu_metric is not None:
         bleu_metric.add_batch(predictions=preds, references=labels)
     if rouge_metric is not None:
-        print("rouge")
         rouge_metric.add_batch(predictions=preds, references=labels)
 
 
@@ -242,10 +241,7 @@ def log_metrics(bleu_metric=None, rouge_metric=None, run_type="train"):
         bleu_score = bleu_metric.compute()["bleu"]
         log[f"{run_type}/train_bleu"] = bleu_score
     if rouge_metric is not None:
-        print("rouge")
         rouge_scores = rouge_metric.compute()
-        print(rouge_scores)
-        quit()
         rouge1 = rouge_scores["rouge1"].mid
         rouge2 = rouge_scores["rouge2"].mid
         log.update(
@@ -259,7 +255,9 @@ def log_metrics(bleu_metric=None, rouge_metric=None, run_type="train"):
             }
         )
     wandb.log(log)
-
+    print()
+    print(rouge_scores)
+    print()
     return bleu_score, rouge_scores
 
 

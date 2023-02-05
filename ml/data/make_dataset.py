@@ -68,8 +68,8 @@ class ProjectDataset(Dataset):
             with open(pickle_path, "rb") as f:
                 dataset = pickle.load(f)
         self.context.extend(dataset["passage"].values.tolist())
-        self.question.extend([self.sep_token.join(questions) for questions in dataset["query"].values.tolist()][:30])
-        self.answers.extend(dataset["annotation"].values.tolist()[:30])
+        self.question.extend([self.sep_token.join(questions) for questions in dataset["query"].values.tolist()])
+        self.answers.extend(dataset["annotation"].values.tolist())
 
     def __len__(self):
         return len(self.question)

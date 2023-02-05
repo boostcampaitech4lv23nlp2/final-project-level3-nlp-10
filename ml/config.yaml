@@ -1,8 +1,8 @@
 common:
   seed: 12345
   batch_size: 4
-  learning_rate: 5e-5
-  num_train_epochs: 5
+  learning_rate: 1e-4
+  num_train_epochs: 10
   dataset_path: /opt/ml/final-project-level3-nlp-10/ml/data/project_dataset
   gzip: True
 wandb:
@@ -27,7 +27,7 @@ fid:
   encoder_tokenizer: klue/bert-base
   continue_learning: False
   checkpoint_path: model/saved_models/fid/mecab/pretrained_last
-  model_save_path: model/saved_models/fid/mecab_newDPR/
+  model_save_path: model/saved_models/fid/mecab_newDPR_topk10/
   reader_model: alaggung/bart-r3f
-  topk: 5
+  topk: 10
   t5_reader_model: KETI-AIR/ke-t5-large
