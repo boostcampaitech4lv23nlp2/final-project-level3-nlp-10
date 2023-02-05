@@ -1,7 +1,9 @@
 from typing import List
 
+import numpy as np
 import uvicorn
 from app_utils import (
+    create_context_embedding,
     get_keyword,
     load_model,
     load_retriever,
@@ -63,6 +65,7 @@ async def get_passages(files: List[bytes] = File()) -> List[List[str]]:
         results.append(result)
     results = results[0]
     print(results)
+    create_context_embedding(results, renew_emb=True)
     keywords = list(get_keyword(results))
     print(keywords)
     return [results, keywords]
@@ -70,11 +73,15 @@ async def get_passages(files: List[bytes] = File()) -> List[List[str]]:
 
 @app.post("/summarize")
 async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
+    sample_num = 3
     dict_keys = dict(keywords)
-    print(dict_keys)
-    output = summarize_fid(dict_keys["keywords"], debug=True, renew_emb=False)
-    ret = [output, "2nd", "3rd"]
-    return ret
+    keywords = np.array(dict_keys["keywords"])
+    print(keywords)
+    inputs = [keywords]
+    for _ in range(sample_num - 1):
+        inputs.append(keywords[np.random.choice(len(keywords), len(keywords) - 1, replace=False)])
+    outputs = summarize_fid(inputs, debug=True, renew_emb=False)
+    return outputs
 
 
 if __name__ == "__main__":

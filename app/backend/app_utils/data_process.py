@@ -31,14 +31,14 @@ def convert2context(json_path):
     return context
 
 
-def create_context_embedding(record_path, renew_emb=True):
+def create_context_embedding(text_list: list, renew_emb=True):
     """meeting record를 통해 새로운 embedding vector들을 계산하여 저장합니다.
 
     Args:
         record_path (str): 회의 기록이 담겨있는 json 파일(현재 Naver Clova Speech의 output에 맞춰져있음)
     """
     retriever = load_retriever()
-    retriever.passages = convert2context(record_path)
+    retriever.passages = text_list
     retriever.create_passage_embeddings(renew_emb=renew_emb)
 
 
