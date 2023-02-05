@@ -1,16 +1,49 @@
 from typing import List
 
+import numpy as np
 import uvicorn
-from api import CSR
-from fastapi import APIRouter, FastAPI, File
+from app_utils import (
+    create_context_embedding,
+    get_keyword,
+    load_model,
+    load_retriever,
+    load_sbert,
+    load_stt_model,
+    predict_stt,
+    split_passages,
+    summarize_fid,
+)
+from fastapi import FastAPI, File
+from pydantic import BaseModel
 
+"""
+Mecab 설치
+    python3 -m pip install konlpy
+    sudo apt-get install curl git
+    bash <(curl -s https://raw.githubusercontent.com/konlpy/konlpy/master/scripts/mecab.sh)
+(참조: https://konlpy.org/en/latest/install/)
+"""
 app = FastAPI()
-stt_router = APIRouter(prefix="/stt")
+
+
+class Keywords(BaseModel):
+    keywords: list
+
+
+class SummarizeResponse(BaseModel):
+    summarization: list
 
 
 @app.on_event("startup")
 def startup_event():
     print("Start Boost2Note Server")
+    load_model(model_type="fid")
+    load_model(model_type="sbert")
+    load_retriever()
+    print("FiD model loaded")
+    load_stt_model()
+    load_sbert()
+    print("success to loading whisper model")
 
 
 @app.on_event("shutdown")
@@ -24,15 +57,31 @@ def read_root():
 
 
 @app.post("/stt/")
-async def get_stt(files: List[bytes] = File(...)):
-    result = CSR(files[0])
-    return result
+async def get_passages(files: List[bytes] = File()) -> List[List[str]]:
+    results = []
+    for file in files:
+        result = predict_stt(file)
+        result = split_passages(result)
+        results.append(result)
+    results = results[0]
+    print(results)
+    create_context_embedding(results, renew_emb=True)
+    keywords = list(get_keyword(results))
+    print(keywords)
+    return [results, keywords]
 
 
-@app.post("/save/")
-async def save_stt_text(files: List[str]):
-    print(files)
-    return {"test": "STT"}
+@app.post("/summarize")
+async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
+    sample_num = 3
+    dict_keys = dict(keywords)
+    keywords = np.array(dict_keys["keywords"])
+    print(keywords)
+    inputs = [keywords]
+    for _ in range(sample_num - 1):
+        inputs.append(keywords[np.random.choice(len(keywords), len(keywords) - 1, replace=False)])
+    outputs = summarize_fid(inputs, debug=True, renew_emb=False)
+    return outputs
 
 
 if __name__ == "__main__":
