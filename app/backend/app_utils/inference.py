@@ -22,9 +22,6 @@ def summarize_fid(keys: np.array, debug=False, renew_emb=True):
         inputs.append(
             reader_tokenizer(input, padding="max_length", truncation=True, max_length=512, return_tensors="pt")
         )
-    # tokenized_input = reader_tokenizer(
-    #    input, padding="max_length", truncation=True, max_length=512, return_tensors="pt"
-    # )
 
     input_ids = torch.stack([item["input_ids"] for item in inputs], dim=0)
     attention_mask = torch.stack([item["attention_mask"] for item in inputs], dim=0)

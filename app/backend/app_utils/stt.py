@@ -48,8 +48,3 @@ def predict_stt(soundfile: bytes):
     audio = load_audio_w_bytes(soundfile)
     results = whisper.transcribe(model, audio)
     return results["segments"]
-
-
-# f = open('../test2.mp3','rb')
-# file = f.read()
-# print(predict_stt(file))
