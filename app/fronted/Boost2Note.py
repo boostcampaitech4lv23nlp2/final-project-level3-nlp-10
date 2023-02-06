@@ -114,7 +114,8 @@ with con2:
             st.session_state["keywords"],
         )
         input_keywords = st_tags(label="키워드 직접 입력", text="Press enter to add more")
-        keywords_set = set(options + [i.strip(" ") for i in input_keywords])
+        keywords_set = set(options + [i.strip(" ") for i in input_keywords if i != ""])
+        # 띄어쓰기 제거 및 중복 제거
     else:
         options = st.multiselect(
             "주요 키워드",
