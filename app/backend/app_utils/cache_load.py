@@ -10,9 +10,9 @@ conf = OmegaConf.load("./config.yaml")
 
 
 @lru_cache
-def load_model(model_type):
+def load_model(model_type, device="cpu"):
     if model_type == "fid":
-        return FiD.from_pretrained(conf.fid.model_path)
+        return FiD.from_pretrained("mountinyy/FiD-kor-bart")
     if model_type == "sbert":
         return KeywordBert()
 

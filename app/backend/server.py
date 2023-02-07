@@ -14,6 +14,7 @@ from app_utils import (
     summarize_fid,
 )
 from fastapi import FastAPI, File
+from omegaconf import OmegaConf
 from pydantic import BaseModel
 
 """
@@ -24,6 +25,8 @@ Mecab 설치
 (참조: https://konlpy.org/en/latest/install/)
 """
 app = FastAPI()
+
+conf = OmegaConf.load("./config.yaml")
 
 
 class Keywords(BaseModel):
@@ -66,7 +69,7 @@ async def get_passages(files: List[bytes] = File()) -> List[List[str]]:
     results = results[0]
     print(results)
     create_context_embedding(results, renew_emb=True)
-    keywords = list(get_keyword(results))
+    keywords = list(get_keyword(results, device=conf.device))
     print(keywords)
     return [results, keywords]
 
