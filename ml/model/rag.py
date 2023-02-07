@@ -499,9 +499,12 @@ class RagTrainer(Trainer):
                 if i % 100 == 0:
                     print(f"{i}:")
                     keywords: List[str] = self.ids_to_clean_text(batch["input_ids"])
-                    print(f"keywords: {keywords[0]}")
-                    print(f"target: {target[0]}")
-                    print(f"prediction : {preds[0]}")
+                    print(f"keywords: {keywords}")
+                    print(f"target: {target}")
+                    print(f"prediction : {preds}")
+                    print(f"rouge1: {rouge1_f[i]}")
+                    print(f"rouge2: {rouge2_f[i]}")
+                    print(f"rougeL: {rougeL_f[i]}")
                 del batch
             if self.is_monitoring:
                 wandb.log(
