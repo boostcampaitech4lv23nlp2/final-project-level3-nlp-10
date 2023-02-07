@@ -432,10 +432,11 @@ class RagTrainer(Trainer):
                 filename = f"epoch_{epoch}"
                 self.save(filename)
 
-    def ids_to_clean_text(self, generated_ids: List[int]):
-        gen_text = self.tokenizer.batch_decode(
-            generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
-        )
+    def ids_to_clean_text(self, generated_ids: List[int], tokenizer=None):
+        if not tokenizer:
+            tokenizer = self.tokenizer
+
+        gen_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         return lmap(str.strip, gen_text)
 
     def generate(self, inputs):
@@ -480,13 +481,10 @@ class RagTrainer(Trainer):
                     max_length=512,
                 )
                 preds: List[str] = self.ids_to_clean_text(generated_ids=generated_ids)
-                target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
+                target: List[List] = [[target] for target in self.ids_to_clean_text(batch["decoder_input_ids"])]
 
-                # generated_tokens = [
-                #     self.tokenizer.generator.convert_ids_to_tokens(g, skip_special_tokens=True) for g in generated_ids
-                # ]
-                rouge = rouge_metric.compute(predictions=[preds], references=[[target]])
-
+                rouge = rouge_metric.compute(predictions=[preds], references=[target])
+                print(rouge["rouge1"].mid.precision)
                 rouge1_p.append(rouge["rouge1"].mid.precision)
                 rouge1_r.append(rouge["rouge1"].mid.recall)
                 rouge1_f.append(rouge["rouge1"].mid.fmeasure)
@@ -498,7 +496,7 @@ class RagTrainer(Trainer):
                 rougeL_f.append(rouge["rougeL"].mid.fmeasure)
                 if i % 100 == 0:
                     print(f"{i}:")
-                    keywords: List[str] = self.ids_to_clean_text(batch["input_ids"])
+                    keywords: List[str] = self.ids_to_clean_text(batch["input_ids"], self.tokenizer.question_encoder)
                     print(f"keywords: {keywords}")
                     print(f"target: {target}")
                     print(f"prediction : {preds}")
