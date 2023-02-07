@@ -27,9 +27,10 @@ def wait_msg(msg, wait=3, type_="warning"):
     placeholder.empty()
 
 
-def call(con, expanders, contents):
+def call(con, titles, contents):
     with con:
-        for expander, content in zip(expanders, contents):
+        for title, content in zip(titles, contents):
+            expander = st.expander(title, expanded=True)
             expander.markdown(content)
 
 
@@ -76,24 +77,29 @@ with con1:
         if st.session_state["success"]:
             if not st.session_state["keywords"]:
                 st.session_state["keywords"] = result[1]
-            with st.expander("STT 원본 텍스트", expanded=True):
-                if not st.session_state["stt"]:
-                    st.session_state["stt"] = result[0]
-                for stt_data in st.session_state["stt"]:
-                    st.write(stt_data)
+            # stt_expanders = []
+            # stt_expander = st.expander("STT 원본 텍스트", expanded=True)
+            # call(con2, expanders, json_res)
+            if not st.session_state["stt"]:
+                st.session_state["stt"] = result[0]
+            titles = ["stt 원본 텍스트"] * len(st.session_state["stt"])
+            call(con1, titles, st.session_state["stt"])
+            # with st.expander("STT 원본 텍스트", expanded=True):
+            # for stt_data in st.session_state["stt"]:
+            #     st.write(stt_data)
 
-                    # for passage in stt_data:
-                    #    st.write(passage)
-                    #    st.write(" ")
+            # for passage in stt_data:
+            #    st.write(passage)
+            #    st.write(" ")
 
-                # st.write(st.session_state["stt"])
-                # _, _, _, con5, con6 = st.columns([0.2, 0.2, 0.1, 0.3, 0.2])
-                # with con6:
-                #     save = st.button("원본 텍스트 저장", key="save_txt")
-                #     if save:
-                #         response = requests.post("http://localhost:8000/save", files=st.session_state["stt"])
-                #         label = response.json()
-                #         st.write(f"label is {label}")
+            # st.write(st.session_state["stt"])
+            # _, _, _, con5, con6 = st.columns([0.2, 0.2, 0.1, 0.3, 0.2])
+            # with con6:
+            #     save = st.button("원본 텍스트 저장", key="save_txt")
+            #     if save:
+            #         response = requests.post("http://localhost:8000/save", files=st.session_state["stt"])
+            #         label = response.json()
+            #         st.write(f"label is {label}")
 
     with record_tab:
         st.write("record")
@@ -121,18 +127,18 @@ with con2:
         options = st.multiselect(
             "주요 키워드",
             list(queue),
-            # ["nnew"],
         )
 
     con8, _ = st.columns([0.8, 0.2])
-    expanders = []
-    for i in range(3):
-        expander = st.expander("? 키워드 요약", expanded=True)
-        # expander.markdown("asddsf")
-        expanders.append(expander)
+    # expanders = []
+    # for i in range(3):
+    #     expander = st.expander("? 키워드 요약", expanded=True)
+    #     # expander.markdown("asddsf")
+    #     expanders.append(expander)
 
     with con8:
         if st.button("요약하기", key="summarization"):
             response = requests.post("http://localhost:8000/summarize", json={"keywords": keywords_set})
             json_res = json.loads(response.text)  # json_res : list
-            call(con2, expanders, json_res)
+            titles = ["키워드 요약"] * len(json_res)  # test
+            call(con2, titles, json_res)
