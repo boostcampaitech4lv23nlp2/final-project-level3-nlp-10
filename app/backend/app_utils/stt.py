@@ -30,6 +30,7 @@ def load_audio_w_bytes(file: bytes, sr: int = 16000):
     try:
         # This launches a subprocess to decode audio while down-mixing and resampling as necessary.
         # Requires the ffmpeg CLI and `ffmpeg-python` package to be installed.
+        # sudo apt install ffmpeg
         out, _ = (
             ffmpeg.input(file, threads=0)
             .output("-", format="s16le", acodec="pcm_s16le", ac=1, ar=sr)
@@ -47,8 +48,3 @@ def predict_stt(soundfile: bytes):
     audio = load_audio_w_bytes(soundfile)
     results = whisper.transcribe(model, audio)
     return results["segments"]
-
-
-# f = open('../test2.mp3','rb')
-# file = f.read()
-# print(predict_stt(file))

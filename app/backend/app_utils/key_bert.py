@@ -1,5 +1,6 @@
 import itertools
 
+import app_utils
 import numpy as np
 from konlpy.tag import Mecab
 from sentence_transformers import SentenceTransformer
@@ -9,7 +10,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 def get_candidates(text):
     mecab = Mecab()
-
     tokenized_doc = mecab.pos(text)
     tokenized_nouns = " ".join(
         [word[0] for word in tokenized_doc if word[1] in ["NNP", "NNG", "SL"]]
@@ -124,3 +124,11 @@ class KeywordBert:
         keyword = list(set(unique_keywords))
 
         return keyword
+
+
+def get_keyword(text_list: list) -> set:
+    keybert_model = app_utils.load_model(model_type="sbert")
+    keywords = set()
+    for text in text_list:
+        keywords.update(keybert_model.extract_keyword(text=text, top_n=5))
+    return keywords
