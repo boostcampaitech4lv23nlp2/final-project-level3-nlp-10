@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple
 
 import os
 
@@ -13,9 +13,11 @@ from tqdm import tqdm
 from transformers import (
     AdamW,
     AutoTokenizer,
+    BartForConditionalGeneration,
     RagRetriever,
     RagTokenForGeneration,
     RagTokenizer,
+    T5ForConditionalGeneration,
     Trainer,
     get_cosine_schedule_with_warmup,
 )
@@ -23,8 +25,12 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_utils import PreTrainedModel
 from transformers.models.rag.modeling_rag import RetrievAugLMMarginOutput
 
-bleu_metric = datasets.load_metric("bleu")
 rouge_metric = datasets.load_metric("rouge")
+
+
+def lmap(f: Callable, x: Iterable) -> List:
+    """list(map(f, x))"""
+    return list(map(f, x))
 
 
 class RagDataset(Dataset):
@@ -48,7 +54,7 @@ class RagDataset(Dataset):
         return q_sample
 
     def map_decoder_inputs(self, context):
-        return f"<s>{context}</s>"
+        return f"[BOS]{context}[EOS]"
 
     def __getitem__(self, idx):
         source_tokenizer = (
@@ -353,7 +359,7 @@ class RagTrainer(Trainer):
 
     def set_tokenizer(self, q_encoder_model_name_or_path: str, generator_model_name_or_path: str):
         self.question_encoder_tokenizer = AutoTokenizer.from_pretrained("klue/bert-base")
-        self.generator_tokenizer = AutoTokenizer.from_pretrained(generator_model_name_or_path)
+        self.generator_tokenizer = AutoTokenizer.from_pretrained("alaggung/bart-r3f")
         self.tokenizer = RagTokenizer(self.question_encoder_tokenizer, self.generator_tokenizer)
 
     def prepare_data(self, query_dataset, summary_dataset, tokenizer: RagTokenizer = None, batch_size=1):
@@ -376,75 +382,136 @@ class RagTrainer(Trainer):
     def train(self):
 
         self.model.cuda()
-        self.model.train()
-        self.model.zero_grad()
-        torch.cuda.empty_cache()
-
         for epoch in range(int(self.conf.num_train_epochs)):
             self.eval()
+            self.model.train()
+            self.model.zero_grad()
+            torch.cuda.empty_cache()
             with tqdm(self.train_dataloader, unit="batch", desc=f"{epoch}th Train: ") as tepoch:
                 for batch in tepoch:
+                    generator = self.model.rag.generator
+                    target_ids = batch["decoder_input_ids"]
+                    if isinstance(self.model.generator, T5ForConditionalGeneration):
+                        decoder_start_token_id = generator.config.decoder_start_token_id
+                        decoder_input_ids = (
+                            torch.cat(
+                                [
+                                    torch.tensor([[decoder_start_token_id]] * target_ids.shape[0]).to(target_ids),
+                                    target_ids,
+                                ],
+                                dim=1,
+                            )
+                            if target_ids.shape[0] < self.target_lens["train"]
+                            else generator._shift_right(target_ids)
+                        )
+                    elif isinstance(generator, BartForConditionalGeneration):
+                        decoder_input_ids = target_ids
+                    lm_labels = decoder_input_ids
                     outputs = self.model(
                         input_ids=batch["input_ids"],
                         attention_mask=batch["attention_mask"],
-                        labels=batch["decoder_input_ids"],
+                        decoder_input_ids=batch["decoder_input_ids"],
+                        labels=lm_labels,
                         n_docs=self.n_docs,
-                        reduce_loss=False,
+                        reduce_loss=True,
+                        use_cache=False,
                         do_marginalize=True,
                     )
-                    loss = torch.mean(outputs.loss)
+                    loss = outputs.loss
                     loss.backward()
                     tepoch.set_postfix(loss=f"{str(loss.item())}")
                     self.optimizer.step()
                     self.scheduler.step()
                     self.model.zero_grad()
-                    torch.cuda.empty_cache()
+
                     if self.is_monitoring:
                         wandb.log({"epoch": epoch, "Train loss": loss, "lr": self.optimizer.param_groups[0]["lr"]})
+                    torch.cuda.empty_cache()
+                    del batch
             if epoch % self.save_period == 0:
                 filename = f"epoch_{epoch}"
                 self.save(filename)
+
+    def ids_to_clean_text(self, generated_ids: List[int]):
+        gen_text = self.tokenizer.batch_decode(
+            generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
+        )
+        return lmap(str.strip, gen_text)
+
+    def generate(self, inputs):
+        source_tokenizer = (
+            self.tokenizer.question_encoder if isinstance(self.tokenizer, RagTokenizer) else self.tokenizer
+        )
+        source_inputs = source_tokenizer.prepare_seq2seq_batch(
+            inputs,
+            max_length=128,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+        )
+        self.model.cuda()
+        with torch.no_grad():
+            generated_ids = self.model.generate(
+                source_inputs["input_ids"].cuda(),
+                attention_mask=source_inputs["attention_mask"].cuda(),
+                do_deduplication=False,  # rag specific parameter
+                use_cache=True,
+                min_length=1,
+                max_length=512,
+            )
+            preds: List[str] = self.ids_to_clean_text(generated_ids=generated_ids)
+        return preds
 
     def eval(self):
         self.model.cuda()
         with torch.no_grad():
             self.model.eval()
             self.model.zero_grad()
-            bleus = []
             rouge1_p, rouge1_r, rouge1_f = [], [], []
             rouge2_p, rouge2_r, rouge2_f = [], [], []
+            rougeL_p, rougeL_r, rougeL_f = [], [], []
             for i, batch in enumerate(tqdm(self.val_dataloader)):
-                generated = self.model.generate(batch["input_ids"], max_length=256)
-                reference = self.tokenizer.generator.tokenize(
-                    self.tokenizer.generator.batch_decode(batch["decoder_input_ids"], skip_special_tokens=True)[0]
+                generated_ids = self.model.generate(
+                    batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    do_deduplication=False,  # rag specific parameter
+                    use_cache=True,
+                    min_length=1,
+                    max_length=512,
                 )
-                generated = [
-                    self.tokenizer.generator.convert_ids_to_tokens(g, skip_special_tokens=True) for g in generated
-                ]
+                preds: List[str] = self.ids_to_clean_text(generated_ids=generated_ids)
+                target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
 
-                bleu = bleu_metric.compute(predictions=[generated], references=[[reference]])
-                rouge = rouge_metric.compute(predictions=[generated], references=[[reference]])
+                # generated_tokens = [
+                #     self.tokenizer.generator.convert_ids_to_tokens(g, skip_special_tokens=True) for g in generated_ids
+                # ]
+                rouge = rouge_metric.compute(predictions=[preds], references=[[target]])
 
-                bleus.append(bleu["bleu"])
                 rouge1_p.append(rouge["rouge1"].mid.precision)
                 rouge1_r.append(rouge["rouge1"].mid.recall)
                 rouge1_f.append(rouge["rouge1"].mid.fmeasure)
                 rouge2_p.append(rouge["rouge2"].mid.precision)
                 rouge2_r.append(rouge["rouge2"].mid.recall)
                 rouge2_f.append(rouge["rouge2"].mid.fmeasure)
+                rougeL_p.append(rouge["rougeL"].mid.precision)
+                rougeL_r.append(rouge["rougeL"].mid.recall)
+                rougeL_f.append(rouge["rougeL"].mid.fmeasure)
                 if i % 100 == 0:
                     print(f"{i}:")
-                    print(f'{self.tokenizer.question_encoder.batch_decode(batch["input_ids"])}')
-                    print(f"{generated}")
+                    keywords: List[str] = self.ids_to_clean_text(batch["input_ids"])
+                    print(f"keywords: {keywords[0]}")
+                    print(f"target: {target[0]}")
+                    print(f"prediction : {preds[0]}")
+                del batch
             if self.is_monitoring:
                 wandb.log(
                     {
-                        "bleu": sum(bleus) / len(bleus),
                         "rouge1_p": sum(rouge1_p) / len(rouge1_p),
                         "rouge1_r": sum(rouge1_r) / len(rouge1_r),
                         "rouge1_f": sum(rouge1_f) / len(rouge1_f),
                         "rouge2_p": sum(rouge2_p) / len(rouge2_p),
                         "rouge2_r": sum(rouge2_r) / len(rouge2_r),
                         "rouge2_f": sum(rouge2_f) / len(rouge2_f),
+                        "rougeL_f": sum(rougeL_f) / len(rougeL_f),
                     }
                 )
