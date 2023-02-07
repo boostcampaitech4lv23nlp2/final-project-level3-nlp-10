@@ -115,7 +115,7 @@ with con2:
         )
         input_keywords = st_tags(label="키워드 직접 입력", text="Press enter to add more")
         st.write(input_keywords)
-        keywords_set = list(set(options + [i.strip(" ") for i in input_keywords if i != " "]))
+        keywords_set = list(set(options + [i.strip(" ") for i in input_keywords if i.strip(" ") != ""]))
         # 띄어쓰기 제거 및 중복 제거
 
     else:
