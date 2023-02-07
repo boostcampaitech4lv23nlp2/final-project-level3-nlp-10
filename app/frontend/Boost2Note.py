@@ -27,18 +27,35 @@ def wait_msg(msg, wait=3, type_="warning"):
     placeholder.empty()
 
 
-def call_one(con, title, contents):
+def call_stt(con, files, contents_list):
     with con:
-        expander = st.expander(title, expanded=True)
-        for content in contents:
-            expander.markdown(content)
+        for file, contents in zip(files, contents_list):
+            expander = st.expander(file.name, expanded=True)
+            for content in contents:
+                expander.markdown(content)
 
 
-def call_multiple(con, titles, contents):
+def call_summary(con, titles, contents):
     with con:
         for title, content in zip(titles, contents):
             expander = st.expander(title, expanded=True)
             expander.markdown(content)
+
+
+def callback_upload():
+    st.session_state["success"] = False
+
+
+def check_files(uploaded_files):
+    new_data = []
+    if not st.session_state["stt"]:
+        return
+    for file, stt_data in zip(*st.session_state["stt"]):
+        for uploaded_file in uploaded_files:
+            if file.id == uploaded_file.id:
+                new_data.append([file, stt_data])
+                break
+    st.session_state["stt"] = list(zip(*new_data))
 
 
 if "keywords" not in st.session_state:
@@ -54,8 +71,12 @@ if "success" not in st.session_state:  # stt 및 문단화 성공에 대한 sess
 if "stt_disabled" not in st.session_state:
     st.session_state["stt_disabled"] = False
 
-empty1, con1, empty2 = st.columns([0.1, 1.0, 0.1])
-empty1, con2, empty2 = st.columns([0.1, 1.0, 0.1])
+if "uploaded" not in st.session_state:
+    st.session_state["uploaded"] = []
+
+empty1, con_stt, empty2 = st.columns([0.001, 1.0, 0.001])
+stt_placeholder = st.empty()
+empty1, con2, empty2 = st.columns([0.001, 1.0, 0.001])
 
 result = None
 with st.sidebar:
@@ -63,12 +84,18 @@ with st.sidebar:
     st.caption("Made by Boost2End")
     st.markdown("---")
 
-with con1:
+with con_stt:
     upload_tab, record_tab = st.tabs(["녹음본 업로드", "..."])
     with upload_tab:
         uploaded_files = st.file_uploader(
-            "녹음 파일을 올려주세요.", key="file_uploader", accept_multiple_files=True, type=["wav", "mp4", "mp3"]
+            "녹음 파일을 올려주세요.",
+            key="file_uploader",
+            accept_multiple_files=True,
+            type=["wav", "mp4", "mp3"],
+            on_change=callback_upload,
         )
+        check_files(uploaded_files)
+
         stt_button = st.button("변환하기", key="stt_button", disabled=st.session_state["stt_disabled"])
         if stt_button:
             if uploaded_files is not None:
@@ -90,9 +117,10 @@ with con1:
             if not st.session_state["keywords"]:
                 st.session_state["keywords"] = result[1]
             if not st.session_state["stt"]:
-                st.session_state["stt"] = result[0]
-            for uploaded_file, stt_data in zip(uploaded_files, st.session_state["stt"]):
-                call_one(con1, uploaded_file.name, stt_data)
+                st.session_state["stt"] = [uploaded_files, result[0]]
+            upload_files, stt_data = st.session_state["stt"]
+            stt_placeholder.empty()
+            call_stt(stt_placeholder.container(), uploaded_files, stt_data)
             # with st.expander("STT 원본 텍스트", expanded=True):
             # for stt_data in st.session_state["stt"]:
             #     st.write(stt_data)
@@ -117,16 +145,18 @@ with con2:
             list(queue),
         )
 
-    con8, _ = st.columns([0.8, 0.2])
+    _, con_summary, _ = st.columns([0.001, 1.0, 0.001])
     # expanders = []
     # for i in range(3):
     #     expander = st.expander("? 키워드 요약", expanded=True)
     #     # expander.markdown("asddsf")
     #     expanders.append(expander)
-
-    with con8:
+    with con_summary:
         if st.button("요약하기", key="summarization"):
             response = requests.post("http://localhost:8000/summarize", json={"keywords": keywords_set})
             json_res = json.loads(response.text)  # json_res : list
             titles = ["키워드 요약"] * len(json_res)  # test
-            call_multiple(con2, titles, json_res)
+            stt_placeholder.empty()
+            call_summary(con_summary, titles, json_res)
+            upload_files, stt_data = st.session_state["stt"]
+            call_stt(stt_placeholder.container(), uploaded_files, stt_data)
