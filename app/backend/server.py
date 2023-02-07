@@ -25,7 +25,6 @@ Mecab 설치
 (참조: https://konlpy.org/en/latest/install/)
 """
 app = FastAPI()
-
 conf = OmegaConf.load("./config.yaml")
 
 
@@ -60,18 +59,24 @@ def read_root():
 
 
 @app.post("/stt/")
-async def get_passages(files: List[bytes] = File()) -> List[List[str]]:
+async def get_passages(files: List[bytes] = File()) -> List:
     results = []
+    keywords = set()
+    passages = set()
     for file in files:
         result = predict_stt(file)
         result = split_passages(result)
+
+        if passages and keywords:
+            passages.update(result)
+            keywords.update(get_keyword(result, device=conf.device))
+        else:
+            passages = set(result)
+            keywords = get_keyword(result, device=conf.device)
+
         results.append(result)
-    results = results[0]
-    print(results)
-    create_context_embedding(results, renew_emb=True)
-    keywords = list(get_keyword(results, device=conf.device))
-    print(keywords)
-    return [results, keywords]
+    create_context_embedding(list(passages), renew_emb=True)
+    return [results, list(keywords)]
 
 
 @app.post("/summarize")

@@ -27,7 +27,14 @@ def wait_msg(msg, wait=3, type_="warning"):
     placeholder.empty()
 
 
-def call(con, titles, contents):
+def call_one(con, title, contents):
+    with con:
+        expander = st.expander(title, expanded=True)
+        for content in contents:
+            expander.markdown(content)
+
+
+def call_multiple(con, titles, contents):
     with con:
         for title, content in zip(titles, contents):
             expander = st.expander(title, expanded=True)
@@ -44,6 +51,9 @@ if "success" not in st.session_state:  # stt 및 문단화 성공에 대한 sess
     st.session_state["success"] = False
     st.session_state["stt"] = ""
 
+if "stt_disabled" not in st.session_state:
+    st.session_state["stt_disabled"] = False
+
 empty1, con1, empty2 = st.columns([0.1, 1.0, 0.1])
 empty1, con2, empty2 = st.columns([0.1, 1.0, 0.1])
 
@@ -59,58 +69,36 @@ with con1:
         uploaded_files = st.file_uploader(
             "녹음 파일을 올려주세요.", key="file_uploader", accept_multiple_files=True, type=["wav", "mp4", "mp3"]
         )
-
-        if st.button("변환하기", key="stt_button"):
-
+        stt_button = st.button("변환하기", key="stt_button", disabled=st.session_state["stt_disabled"])
+        if stt_button:
             if uploaded_files is not None:
+                files = []
+                st.session_state["stt_disabled"] = True
                 for uploaded_file in uploaded_files:
                     msg = "변환 중입니다.."
                     sound_bytes = uploaded_file.getvalue()
-                    files = [("files", (uploaded_file.name, sound_bytes, uploaded_file.type))]
-                    response = requests.post("http://localhost:8000/stt", files=files)
-                    result = response.json()
-                    print(result)
-                    wait_msg(msg, 3, msg)
+                    files.append(("files", (uploaded_file.name, sound_bytes, uploaded_file.type)))
+                response = requests.post("http://localhost:8000/stt", files=files)
+                result = response.json()
+                print(result)
+                st.session_state["stt_disabled"] = False
+                # wait_msg(msg, 3, msg)
                 st.session_state["keywords"] = None
                 st.session_state["success"] = st.success("변환 완료")
 
         if st.session_state["success"]:
             if not st.session_state["keywords"]:
                 st.session_state["keywords"] = result[1]
-            # stt_expanders = []
-            # stt_expander = st.expander("STT 원본 텍스트", expanded=True)
-            # call(con2, expanders, json_res)
             if not st.session_state["stt"]:
                 st.session_state["stt"] = result[0]
-            titles = ["stt 원본 텍스트"] * len(st.session_state["stt"])
-            call(con1, titles, st.session_state["stt"])
+            for uploaded_file, stt_data in zip(uploaded_files, st.session_state["stt"]):
+                call_one(con1, uploaded_file.name, stt_data)
             # with st.expander("STT 원본 텍스트", expanded=True):
             # for stt_data in st.session_state["stt"]:
             #     st.write(stt_data)
 
-            # for passage in stt_data:
-            #    st.write(passage)
-            #    st.write(" ")
-
-            # st.write(st.session_state["stt"])
-            # _, _, _, con5, con6 = st.columns([0.2, 0.2, 0.1, 0.3, 0.2])
-            # with con6:
-            #     save = st.button("원본 텍스트 저장", key="save_txt")
-            #     if save:
-            #         response = requests.post("http://localhost:8000/save", files=st.session_state["stt"])
-            #         label = response.json()
-            #         st.write(f"label is {label}")
-
     with record_tab:
         st.write("record")
-
-        # if file is not None:
-        #     try:
-        #         img = Image.open(file)
-        #     except:
-        #         st.error("The file you uploaded does not seem to be a valid image. Try uploading a png or jpg file.")
-        # if st.session_state.get("image_url") not in ["", None]:
-        #     st.warning("To use the file uploader, remove the image URL first.")
 
 
 with con2:
@@ -141,4 +129,4 @@ with con2:
             response = requests.post("http://localhost:8000/summarize", json={"keywords": keywords_set})
             json_res = json.loads(response.text)  # json_res : list
             titles = ["키워드 요약"] * len(json_res)  # test
-            call(con2, titles, json_res)
+            call_multiple(con2, titles, json_res)
