@@ -35,9 +35,24 @@ def call_stt(con, files, contents_list):
                 expander.markdown(content)
 
 
+def call_annotated_stt(con, files, contents_list, annotated_texts):
+    print(annotated_texts[0])
+    with con:
+        for file, contents in zip(files, contents_list):
+            expander = st.expander(file.name, expanded=True)
+            for content in contents:
+                if content in annotated_texts:
+                    text = f"**:blue[{content}]**"
+                else:
+                    text = content
+                expander.markdown(text)
+
+
 def call_summary(con, titles, contents):
     with con:
         for title, content in zip(titles, contents):
+            if type(title) == list:
+                title = ", ".join(title)
             expander = st.expander(title, expanded=True)
             expander.markdown(content)
 
@@ -75,7 +90,7 @@ if "uploaded" not in st.session_state:
     st.session_state["uploaded"] = []
 
 empty1, con_stt, empty2 = st.columns([0.001, 1.0, 0.001])
-stt_placeholder = st.empty()
+
 empty1, con2, empty2 = st.columns([0.001, 1.0, 0.001])
 
 result = None
@@ -109,10 +124,9 @@ with con_stt:
                 result = response.json()
                 print(result)
                 st.session_state["stt_disabled"] = False
-                # wait_msg(msg, 3, msg)
                 st.session_state["keywords"] = None
                 st.session_state["success"] = st.success("변환 완료")
-
+        stt_placeholder = st.empty()
         if st.session_state["success"]:
             if not st.session_state["keywords"]:
                 st.session_state["keywords"] = result[1]
@@ -145,18 +159,17 @@ with con2:
             list(queue),
         )
 
-    _, con_summary, _ = st.columns([0.001, 1.0, 0.001])
     # expanders = []
     # for i in range(3):
     #     expander = st.expander("? 키워드 요약", expanded=True)
     #     # expander.markdown("asddsf")
     #     expanders.append(expander)
-    with con_summary:
-        if st.button("요약하기", key="summarization"):
-            response = requests.post("http://localhost:8000/summarize", json={"keywords": keywords_set})
-            json_res = json.loads(response.text)  # json_res : list
-            titles = ["키워드 요약"] * len(json_res)  # test
-            stt_placeholder.empty()
-            call_summary(con_summary, titles, json_res)
-            upload_files, stt_data = st.session_state["stt"]
-            call_stt(stt_placeholder.container(), uploaded_files, stt_data)
+    if st.button("요약하기", key="summarization"):
+        response = requests.post("http://localhost:8000/summarize", json={"keywords": keywords_set})
+        json_res = json.loads(response.text)  # json_res : list
+        titles = ["키워드 요약"] * len(json_res[1])  # test
+        print(json_res)
+        call_summary(con2, json_res[0], json_res[1])
+        upload_files, stt_data = st.session_state["stt"]
+        stt_placeholder.empty()
+        call_annotated_stt(stt_placeholder.container(), uploaded_files, stt_data, json_res[2])

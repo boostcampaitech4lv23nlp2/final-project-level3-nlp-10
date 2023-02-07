@@ -84,12 +84,18 @@ async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
     sample_num = 3
     dict_keys = dict(keywords)
     keywords = np.array(dict_keys["keywords"])
-    print(keywords)
+    keyword_list = [keywords.tolist()]
     inputs = [keywords]
     for _ in range(sample_num - 1):
-        inputs.append(keywords[np.random.choice(len(keywords), len(keywords) - 1, replace=False)])
-    outputs = summarize_fid(inputs, debug=True, renew_emb=False)
-    return outputs
+        keyword = keywords[np.random.choice(len(keywords), len(keywords) - 1, replace=False)]
+        keyword_list.append(keyword.tolist())
+        inputs.append(keyword)
+    outputs, top_docs = summarize_fid(inputs, debug=True, renew_emb=False)
+
+    top_docs = {doc for docs in top_docs for doc in docs}
+
+    results = [keyword_list, outputs, list(top_docs)]
+    return results
 
 
 if __name__ == "__main__":
