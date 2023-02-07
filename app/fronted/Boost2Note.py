@@ -6,6 +6,7 @@ from collections import deque
 import requests
 import streamlit as st
 import streamlit_nested_layout
+from streamlit_tags import st_tags
 
 __all__ = ["streamlit_nested_layout"]
 
@@ -112,12 +113,17 @@ with con2:
             "주요 키워드",
             st.session_state["keywords"],
         )
+        input_keywords = st_tags(label="키워드 직접 입력", text="Press enter to add more")
+        keywords_set = list(set(options + [i.strip(" ") for i in input_keywords if i.strip(" ") != ""]))
+        # 띄어쓰기 제거 및 중복 제거
+
     else:
         options = st.multiselect(
             "주요 키워드",
             list(queue),
             # ["nnew"],
         )
+
     con8, _ = st.columns([0.8, 0.2])
     expanders = []
     for i in range(3):
@@ -127,6 +133,6 @@ with con2:
 
     with con8:
         if st.button("요약하기", key="summarization"):
-            response = requests.post("http://localhost:8000/summarize", json={"keywords": options})
+            response = requests.post("http://localhost:8000/summarize", json={"keywords": keywords_set})
             json_res = json.loads(response.text)  # json_res : list
             call(con2, expanders, json_res)

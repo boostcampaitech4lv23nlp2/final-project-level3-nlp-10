@@ -26,5 +26,6 @@ rouge==1.0.1
 rouge-score==0.1.2
 sentence-transformers==2.2.2
 streamlit-nested-layout==0.1.1
+streamlit_tags==1.2.8
 utils==1.0.1
 uvicorn==0.20.0
