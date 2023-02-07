@@ -8,4 +8,3 @@ dpr:
 fid:
   retriever_tokenizer: klue/bert-base
   reader_tokenizer: alaggung/bart-r3f
-  model_path: resources/saved_models/FiD/pretrained
