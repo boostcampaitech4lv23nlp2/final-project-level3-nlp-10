@@ -9,7 +9,8 @@ conf = OmegaConf.load("./config.yaml")
 def summarize_fid(keys: np.array, debug=False, renew_emb=True):
     (retriever_tokenizer, reader_tokenizer) = load_tokenizer()
     retriever = load_retriever()
-    model = load_model(model_type="fid")
+    model = load_model(model_type="fid", device=conf.device)
+    model.to(conf.device)
     queries = [retriever_tokenizer.sep_token.join(key) for key in keys]
     tokenized_query = retriever_tokenizer(
         queries, padding="max_length", truncation=True, max_length=512, return_tensors="pt"
@@ -23,8 +24,8 @@ def summarize_fid(keys: np.array, debug=False, renew_emb=True):
             reader_tokenizer(input, padding="max_length", truncation=True, max_length=512, return_tensors="pt")
         )
 
-    input_ids = torch.stack([item["input_ids"] for item in inputs], dim=0)
-    attention_mask = torch.stack([item["attention_mask"] for item in inputs], dim=0)
+    input_ids = torch.stack([item["input_ids"] for item in inputs], dim=0).to(conf.device)
+    attention_mask = torch.stack([item["attention_mask"] for item in inputs], dim=0).to(conf.device)
     output = model.generate(
         input_ids=input_ids, attention_mask=attention_mask, max_length=512, num_beams=5, early_stopping=True
     )
@@ -34,6 +35,8 @@ def summarize_fid(keys: np.array, debug=False, renew_emb=True):
         for input_ids in input_ids[0]:
             print(reader_tokenizer.decode(input_ids, skip_special_tokens=True))
         print(outputs[0])
+    model.to("cpu")
+    print(model.device)
     return outputs
 
 
