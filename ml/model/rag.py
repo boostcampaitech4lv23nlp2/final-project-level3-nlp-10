@@ -459,6 +459,7 @@ class RagTrainer(Trainer):
                 use_cache=True,
                 min_length=1,
                 max_length=512,
+                n_docs=self.n_docs,
             )
             preds: List[str] = self.ids_to_clean_text(generated_ids=generated_ids)
         return preds
