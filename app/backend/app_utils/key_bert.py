@@ -15,7 +15,7 @@ def get_candidates(text):
         [word[0] for word in tokenized_doc if word[1] in ["NNP", "NNG", "SL"]]
     )  # 일반명사, 고유명사, 외국어
     if len(tokenized_nouns) == 0:
-        return [""]
+        return ""
 
     n_gram_range = (1, 1)
     count = CountVectorizer(ngram_range=n_gram_range, token_pattern=r"(?u)\b\w+\b").fit([tokenized_nouns])
@@ -110,6 +110,8 @@ class KeywordBert:
 
     def extract_keyword(self, text: str, top_n: int = 5):
         candidates = get_candidates(text)
+        if len(candidates) == 0:
+            return ""
         doc_embedding, candidate_embeddings = self.load_embeddings(text, candidates)
 
         results = list()
