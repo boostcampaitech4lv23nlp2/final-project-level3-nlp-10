@@ -8,7 +8,7 @@ from app_utils import (
     load_model,
     load_retriever,
     load_sbert,
-    load_stt_model,
+    load_small_stt_model,
     predict_stt,
     split_passages,
     summarize_fid,
@@ -43,7 +43,7 @@ def startup_event():
     load_model(model_type="sbert")
     load_retriever()
     print("FiD model loaded")
-    load_stt_model()
+    load_small_stt_model()
     load_sbert()
     print("success to loading whisper model")
 
