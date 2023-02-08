@@ -14,9 +14,11 @@ def get_candidates(text):
     tokenized_nouns = " ".join(
         [word[0] for word in tokenized_doc if word[1] in ["NNP", "NNG", "SL"]]
     )  # 일반명사, 고유명사, 외국어
+    if len(tokenized_nouns) == 0:
+        return [""]
 
     n_gram_range = (1, 1)
-    count = CountVectorizer(ngram_range=n_gram_range).fit([tokenized_nouns])
+    count = CountVectorizer(ngram_range=n_gram_range, token_pattern=r"(?u)\b\w+\b").fit([tokenized_nouns])
     candidates = count.get_feature_names_out()
     return candidates
 
