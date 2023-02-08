@@ -25,7 +25,6 @@ Mecab 설치
 (참조: https://konlpy.org/en/latest/install/)
 """
 app = FastAPI()
-
 conf = OmegaConf.load("./config.yaml")
 
 
@@ -60,18 +59,24 @@ def read_root():
 
 
 @app.post("/stt/")
-async def get_passages(files: List[bytes] = File()) -> List[List[str]]:
+async def get_passages(files: List[bytes] = File()) -> List:
     results = []
+    keywords = set()
+    passages = set()
     for file in files:
         result = predict_stt(file)
         result = split_passages(result)
+
+        if passages and keywords:
+            passages.update(result)
+            keywords.update(get_keyword(result, device=conf.device))
+        else:
+            passages = set(result)
+            keywords = get_keyword(result, device=conf.device)
+
         results.append(result)
-    results = results[0]
-    print(results)
-    create_context_embedding(results, renew_emb=True)
-    keywords = list(get_keyword(results, device=conf.device))
-    print(keywords)
-    return [results, keywords]
+    create_context_embedding(list(passages), renew_emb=True)
+    return [results, list(keywords)]
 
 
 @app.post("/summarize")
@@ -79,12 +84,18 @@ async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
     sample_num = 3
     dict_keys = dict(keywords)
     keywords = np.array(dict_keys["keywords"])
-    print(keywords)
+    keyword_list = [keywords.tolist()]
     inputs = [keywords]
     for _ in range(sample_num - 1):
-        inputs.append(keywords[np.random.choice(len(keywords), len(keywords) - 1, replace=False)])
-    outputs = summarize_fid(inputs, debug=True, renew_emb=False)
-    return outputs
+        keyword = keywords[np.random.choice(len(keywords), len(keywords) - 1, replace=False)]
+        keyword_list.append(keyword.tolist())
+        inputs.append(keyword)
+    outputs, top_docs = summarize_fid(inputs, debug=True, renew_emb=False)
+
+    top_docs = {doc for docs in top_docs for doc in docs}
+
+    results = [keyword_list, outputs, list(top_docs)]
+    return results
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ def summarize_fid(keys: np.array, debug=False, renew_emb=True):
         print(outputs[0])
     model.to("cpu")
     print(model.device)
-    return outputs
+    return outputs, top_docs
 
 
 def get_top_docs(retriever, query):
