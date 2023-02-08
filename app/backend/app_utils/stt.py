@@ -1,7 +1,8 @@
 import ffmpeg
 import numpy as np
 import whisper
-from app_utils import load_stt_model
+from app_utils import load_small_stt_model
+from hanspell import spell_checker
 
 
 def load_audio_w_bytes(file: bytes, sr: int = 16000):
@@ -42,9 +43,29 @@ def load_audio_w_bytes(file: bytes, sr: int = 16000):
     return np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
 
 
-def predict_stt(soundfile: bytes):
-    model = load_stt_model()
-    # model = whisper.load_model("base")
+def predict_stt(soundfile: bytes) -> list:
+    model = load_small_stt_model()
     audio = load_audio_w_bytes(soundfile)
-    results = whisper.transcribe(model, audio)
-    return results["segments"]
+    stt_results = whisper.transcribe(model, audio)
+    results = get_post_process(stt_results)
+    return results
+
+
+def split_sentences(text: list) -> str:
+    content_list = [""]
+
+    for t in text:
+        if len(content_list[-1]) + len(t) < 500:
+            content_list[-1] += t
+        else:
+            content_list.append(t)
+
+    return content_list
+
+
+def get_post_process(texts: list):
+    sentences = [seg["text"].strip() for seg in texts["segments"]]
+    sents = split_sentences(sentences)
+    spelled_sents = spell_checker.check(sents)
+    result = [spelled.checked for spelled in spelled_sents]  # checked : 변환 후
+    return result
