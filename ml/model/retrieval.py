@@ -779,8 +779,6 @@ class BM25:
         dataset,
         data_path: Optional[str] = "../data",
     ):
-        super().__init__(tokenizer=tokenizer, dataset=dataset, data_path=data_path)
-
         self.contexts = dataset
         print(f"Lengths of unique contexts : {len(self.contexts)}")
         self.ids = list(range(len(self.contexts)))
