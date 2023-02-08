@@ -1,6 +1,5 @@
 import json
 import sys
-import time
 from collections import deque
 
 import requests
@@ -18,13 +17,6 @@ st.set_page_config(layout="wide")
 # =======
 #   App
 # =======
-
-
-def wait_msg(msg, wait=3, type_="warning"):
-    placeholder = st.empty()
-    placeholder.warning(msg, icon="🤖")
-    time.sleep(wait)
-    placeholder.empty()
 
 
 def call_stt(con, files, contents_list):
@@ -61,6 +53,12 @@ def callback_upload():
     st.session_state["success"] = False
 
 
+def callback_multiselect(placeholder):
+    upload_files, stt_data = st.session_state["stt"]
+    placeholder.empty()
+    call_stt(placeholder.container(), uploaded_files, stt_data)
+
+
 def check_files(uploaded_files):
     new_data = []
     if not st.session_state["stt"]:
@@ -90,7 +88,6 @@ if "uploaded" not in st.session_state:
     st.session_state["uploaded"] = []
 
 empty1, con_stt, empty2 = st.columns([0.001, 1.0, 0.001])
-
 empty1, con2, empty2 = st.columns([0.001, 1.0, 0.001])
 
 result = None
@@ -116,8 +113,10 @@ with con_stt:
             if uploaded_files is not None:
                 files = []
                 st.session_state["stt_disabled"] = True
+                msg = "변환 중입니다.."
+                warning_placeholder = st.empty()
+                warning_placeholder.warning(msg, icon="🤖")
                 for uploaded_file in uploaded_files:
-                    msg = "변환 중입니다.."
                     sound_bytes = uploaded_file.getvalue()
                     files.append(("files", (uploaded_file.name, sound_bytes, uploaded_file.type)))
                 response = requests.post("http://localhost:8000/stt", files=files)
@@ -125,6 +124,7 @@ with con_stt:
                 print(result)
                 st.session_state["stt_disabled"] = False
                 st.session_state["keywords"] = None
+                warning_placeholder.empty()
                 st.session_state["success"] = st.success("변환 완료")
         stt_placeholder = st.empty()
         if st.session_state["success"]:
@@ -146,28 +146,22 @@ with con_stt:
 with con2:
     if st.session_state["keywords"]:
         options = st.multiselect(
-            "주요 키워드",
-            st.session_state["keywords"],
+            "주요 키워드", st.session_state["keywords"], on_change=callback_multiselect, args=(stt_placeholder,)
         )
         input_keywords = st_tags(label="키워드 직접 입력", text="Press enter to add more")
         keywords_set = list(set(options + [i.strip(" ") for i in input_keywords if i.strip(" ") != ""]))
         # 띄어쓰기 제거 및 중복 제거
 
     else:
-        options = st.multiselect(
-            "주요 키워드",
-            list(queue),
-        )
+        options = st.multiselect("주요 키워드", list(queue), on_change=callback_multiselect, args=(stt_placeholder,))
 
-    # expanders = []
-    # for i in range(3):
-    #     expander = st.expander("? 키워드 요약", expanded=True)
-    #     # expander.markdown("asddsf")
-    #     expanders.append(expander)
     if st.button("요약하기", key="summarization"):
+        msg = "요약 중입니다.."
+        warning_placeholder = st.empty()
+        warning_placeholder.warning(msg, icon="🤖")
         response = requests.post("http://localhost:8000/summarize", json={"keywords": keywords_set})
         json_res = json.loads(response.text)  # json_res : list
-        titles = ["키워드 요약"] * len(json_res[1])  # test
+        warning_placeholder.empty()
         print(json_res)
         call_summary(con2, json_res[0], json_res[1])
         upload_files, stt_data = st.session_state["stt"]
