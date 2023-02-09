@@ -353,7 +353,7 @@ class DenseRetrieval:
         else:
             self.val_dataloader, self.train_passage_dataloader = None, None
         self.set_optimziers(conf)
-        self.get_dense_embedding(reset=True)
+        # self.get_dense_embedding(reset=True)
         # self.build_faiss()
 
     def prepare_in_batch_negative(
@@ -618,17 +618,15 @@ class DenseRetrieval:
                 pickle.dump(self.p_embedding, file)
             print("Embedding pickle saved.")
 
-    def build_faiss(self, num_clusters=64) -> NoReturn:
+    def build_faiss(self, num_clusters=64, reset=False) -> NoReturn:
         indexer_name = f"dense_faiss_clusters{num_clusters}.faiss"
         indexer_path = os.path.join(self.data_path, indexer_name)
-        if os.path.isfile(indexer_path):
+
+        if os.path.isfile(indexer_path) and reset is False:
             print("Load Saved Faiss Indexer.")
             self.indexer = faiss.read_index(indexer_path)
 
         else:
-            print(self.p_embedding[0].shape)
-
-            # p_emb = np.ndarray(self.p_embedding)
             p_embs = torch.stack(self.p_embedding, dim=0).view(len(self.p_embedding), -1)
             p_emb = p_embs.numpy()
             emb_dim = p_emb.shape[-1]
@@ -781,8 +779,6 @@ class BM25:
         dataset,
         data_path: Optional[str] = "../data",
     ):
-        super().__init__(tokenizer=tokenizer, dataset=dataset, data_path=data_path)
-
         self.contexts = dataset
         print(f"Lengths of unique contexts : {len(self.contexts)}")
         self.ids = list(range(len(self.contexts)))
