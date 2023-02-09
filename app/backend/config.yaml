@@ -1,0 +1,10 @@
+topk: 5
+emb_save_path: resources/meeting_embeddings/
+device: cuda
+
+dpr:
+  batch_size: 4
+
+fid:
+  retriever_tokenizer: klue/bert-base
+  reader_tokenizer: alaggung/bart-r3f
