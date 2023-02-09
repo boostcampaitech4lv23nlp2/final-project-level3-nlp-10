@@ -1,4 +1,4 @@
-# Boost2Note
+
 <a name="readme-top"></a>
 <p align="center">
     <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10/blob/master/LICENSE">
@@ -16,14 +16,13 @@
     <img src="assets/logo.png" alt="Logo" width="200" >
   </a>
 
-  <h3 align="center">Boost2Note</h3>
+  <h2 align="center">Boost2Note</h2>
 
   <p align="center">
     회의 음성 기록을 키워드별 요약으로 보다 기록 관리를 편리하게! 
     <br />
     <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10"><strong>Explore the docs(Notion) »</strong></a>
-    <br />
-    <br />
+    ·
     <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10">View Demo</a>
     ·
     <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10/issues">Report Bug</a>
