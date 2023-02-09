@@ -1,0 +1,25 @@
+
+wandb: 
+  project_name: "final_project"
+  entity_name: "boost2end"
+  run_name: "DPR"
+
+train: 
+  output_dir: "./data/saved"
+  learning_rate: 3e-5
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  num_train_epochs: 10
+  weight_decay: 0.0001
+
+path:
+  model_name_or_path: "klue/bert-base"
+  dataset_name_or_path: "squad_kor_v1"
+  train_data_path: "../data/example"
+  validation_data_path: "../example"
+  use_faiss: False
+  ckpt_dir: "./data/ckpt"
+  wandb_dir: "./data/wandb_checkpoints"
+
+others:
+  seed: 42
