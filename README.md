@@ -27,9 +27,14 @@
     <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10">View Demo</a>
     ·
     <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10/issues">Report Bug</a>
-
+  </p>
+  <p align="center">
+  <img src="https://img.shields.io/badge/python-3776AB?style=flat&logo=python&logoColor=white"/> <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=PyTorch&logoColor=white"/>    
+<img src="https://img.shields.io/badge/streamlit-FF4B4B?style=flat&logo=streamlit&logoColor=white"/> <img src="https://img.shields.io/badge/FastAPI-009688?style=flat&logo=FastAPI&logoColor=white"/>
   </p>
 </div>
+
+
 
 ## Why **Boost2Note?**
 💬 많은 사람들이 사용하는 **음성 녹음 기록 노트**. 하지만 길어질수록 다시 듣기가 어렵습니다.
