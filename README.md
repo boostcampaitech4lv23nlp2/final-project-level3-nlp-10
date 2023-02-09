@@ -1,16 +1,21 @@
 # Boost2Note
-
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
-
+<a name="readme-top"></a>
+<p align="center">
+    <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10/blob/master/LICENSE">
+        <img alt="Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-yellow.svg">
+    </a>
+    <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10/issues">
+        <img alt="Issues" src="https://img.shields.io/github/issues/boostcampaitech4lv23nlp2/final-project-level3-nlp-10">
+<!--     </a>
+    <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10/actions/workflows/linter.yml">
+        <img alt="linter" src="https://github.com/monologg/KoBigBird/actions/workflows/linter.yml/badge.svg">
+    </a> -->
+</p>
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
   <a href="https://github.com/othneildrew/Best-README-Template">
-    <img src="assets/logo.png" alt="Logo">
+    <img src="assets/logo.png" alt="Logo" width="200" >
   </a>
 
   <h3 align="center">Boost2Note</h3>
@@ -27,6 +32,7 @@
 
   </p>
 </div>
+
 
 
 ### Members
