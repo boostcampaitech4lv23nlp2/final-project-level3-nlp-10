@@ -1,13 +1,13 @@
 common:
   seed: 12345
   batch_size: 4
-  learning_rate: 1e-4
+  learning_rate: 0.000025
   num_train_epochs: 10
   dataset_path: /opt/ml/final-project-level3-nlp-10/ml/data/project_dataset
   gzip: True
 wandb:
-  project_name: Final_FiD_train
-  #project_name: Final_FiD_trail
+  #project_name: Final_FiD_train
+  project_name: Final_FiD_trail
   entity_name: boost2end
 dpr:
   #emb_type: train # [train, valid, all] 중 어떤 dataset으로 embedding passage들을 사용할 지 선택.
@@ -25,9 +25,9 @@ dpr:
 
 fid:
   encoder_tokenizer: klue/bert-base
-  continue_learning: False
-  checkpoint_path: model/saved_models/fid/mecab/pretrained_last
-  model_save_path: model/saved_models/fid/mecab_newDPR_topk10/
+  continue_learning: True
+  checkpoint_path: /opt/ml/final-project-level3-nlp-10/ml/model/saved_models/fid/mecab_newDPR_topk10/pretrained_last
+  model_save_path: model/saved_models/fid/mecab_newDPR_topk10_epoch20
   reader_model: alaggung/bart-r3f
   topk: 10
   t5_reader_model: KETI-AIR/ke-t5-large

@@ -4,7 +4,7 @@ import torch
 import wandb
 from data.make_dataset import ProjectDataset
 from datasets import load_metric
-from model.models import FiD, FiDT5
+from model.models import FiD, FiDT5Mentor
 from model.retriever import DPRContextEncoder, DPRQuestionEncoder
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -29,7 +29,7 @@ def fid_train(conf, emb_type="train", t5=False):
         valid_dataset, batch_size=conf.common.batch_size, shuffle=False, collate_fn=collate_fn, drop_last=True
     )
     wandb.login()
-    wandb.init(project=conf.wandb.project_name, entity=conf.wandb.entity_name, name="mecab_newdpr_15")
+    wandb.init(project=conf.wandb.project_name, entity=conf.wandb.entity_name, name="topk10_continue_epoch20")
 
     args = TrainingArguments(
         output_dir="dense_retireval",
@@ -50,7 +50,7 @@ def fid_train(conf, emb_type="train", t5=False):
         print("use emb train")
         emb_path = conf.dpr.emb_train_path
         emb_dataset = train_dataset
-    elif emb_type == "valid":
+    elif emb_type == "eval":
         print("use emb valid")
         emb_path = conf.dpr.emb_valid_path
         emb_dataset = valid_dataset
@@ -70,13 +70,12 @@ def fid_train(conf, emb_type="train", t5=False):
         q_encoder=q_encoder,
         emb_save_path=emb_path,
     )
-    # retriever.set_passage_dataloader()
     retriever.create_passage_embeddings()
 
     model = set_model(conf, t5)
 
-    blue_metric = load_metric("bleu")
-    # blue_metric = None
+    # blue_metric = load_metric("bleu")
+    blue_metric = None
     rouge_metric = load_metric("rouge")
 
     os.makedirs(conf.fid.model_save_path, exist_ok=True)
@@ -244,6 +243,7 @@ def log_metrics(bleu_metric=None, rouge_metric=None, run_type="train"):
         rouge_scores = rouge_metric.compute()
         rouge1 = rouge_scores["rouge1"].mid
         rouge2 = rouge_scores["rouge2"].mid
+        rougeL = rouge_scores["rougeL"].mid
         log.update(
             {
                 f"{run_type}/train_rouge1_precision": rouge1.precision,
@@ -252,12 +252,12 @@ def log_metrics(bleu_metric=None, rouge_metric=None, run_type="train"):
                 f"{run_type}/train_rouge2_precision": rouge2.precision,
                 f"{run_type}/train_rouge2_recall": rouge2.recall,
                 f"{run_type}/train_rouge2_f-score": rouge2.fmeasure,
+                f"{run_type}/train_rougeL_precision": rougeL.precision,
+                f"{run_type}/train_rougeL_recall": rougeL.recall,
+                f"{run_type}/train_rougeL_f-score": rougeL.fmeasure,
             }
         )
     wandb.log(log)
-    print()
-    print(rouge_scores)
-    print()
     return bleu_score, rouge_scores
 
 
@@ -270,7 +270,7 @@ def print_summarize_example(model, reader_tokenizer, input_ids, attention_mask, 
     # generate에는 (batch_size, topk, max_seq) 크기의 3차원 텐서 입력
     predicted_list.append(
         reader_tokenizer.decode(
-            model.generate(input_ids[0].unsqueeze(0), attention_mask[0].unsqueeze(0), max_length=70)[0],
+            model.generate(input_ids[0].unsqueeze(0), attention_mask[0].unsqueeze(0), max_length=512)[0],
             skip_special_tokens=True,
         )
     )
@@ -286,13 +286,21 @@ def set_model(conf, t5):
         reader_model = conf.fid.t5_reader_model
         basemodel_config = AutoConfig.from_pretrained(reader_model)
         if conf.fid.continue_learning:
-            model = FiDT5.from_pretrained(reader_model)
+            # 김산 버전 T5
+            # model = FiDT5.from_pretrained(reader_model)
+
+            # 멘토님 버전 T5
+            model = FiDT5Mentor(reader_model)
             print("\n" + "-" * 30)
             print("start learning from checkpoint")
             print("-" * 30 + "\n")
         else:
-            model = FiDT5.from_path(model_config=basemodel_config)
-            model.load_pretrained_params(reader_model)
+            # 김산 버전 T5
+            # model = FiDT5.from_path(model_config=basemodel_config)
+            # model.load_pretrained_params(reader_model)
+
+            # 멘토님 버전 T5
+            model = FiDT5Mentor(reader_model)
     else:
         reader_model = conf.fid.reader_model
         if conf.fid.continue_learning:

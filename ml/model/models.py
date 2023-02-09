@@ -190,3 +190,43 @@ class FiDT5(T5ForConditionalGeneration):
             attention_mask=attention_mask.view(attention_mask.size(0), -1),
             max_length=max_length,
         )
+
+
+class FiDT5Mentor(nn.Module):
+    def __init__(self, model_name):
+        super().__init__()
+        self.model = T5ForConditionalGeneration.from_pretrained(model_name)
+        self.encoder = self.model.get_encoder()
+
+    def forward(self, input_ids=None, attention_mask=None, labels=None):
+        # input_ids: (batch_size, n_passages, passage_length)
+        batch_size, n_passages, passage_len = input_ids.shape
+
+        # (bs, n_passages, passage_len) -> (bs * n_passages, passage_len)
+        input_ids = input_ids.reshape(-1, passage_len)
+        attention_mask_tmp = attention_mask.reshape(-1, passage_len)
+
+        # encode the question + context
+        encoder_outputs = self.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask_tmp,
+        )
+
+        # concat all the encoder hidden states
+        # (bs * n_passages, passage_len, hidden_dim) -> (bs, n_passages * passage_len, hidden_dim)
+        hidden_states = encoder_outputs[0]
+        encoder_outputs = (hidden_states.reshape(batch_size, n_passages * passage_len, -1), *encoder_outputs[1:])
+        attention_mask = attention_mask.reshape(batch_size, -1)
+
+        # Fusion-in-Decoder
+        outputs = self.model(
+            input_ids=None, attention_mask=attention_mask, encoder_outputs=encoder_outputs, labels=labels
+        )
+        return outputs
+
+    def generate(self, input_ids, attention_mask, max_length):
+        return self.model.generate(
+            input_ids=input_ids.view(input_ids.size(0), -1),
+            attention_mask=attention_mask.view(attention_mask.size(0), -1),
+            max_length=max_length,
+        )
