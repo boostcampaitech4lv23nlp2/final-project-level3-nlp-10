@@ -1,29 +1,35 @@
-# final-project-level3-nlp-10
+# Boost2Note
 
-## 📄 Guideline
-> `make` 명령어를 실행했을 때, `bash: make: command not found` error가 발생한다면, `make`를 설치해주셔야 합니다.
->```bash
-> apt-get update
-> apt-get install -y make
->```
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![MIT License][license-shield]][license-url]
 
-1. Setup
+<!-- PROJECT LOGO -->
+<br />
+<div align="center">
+  <a href="https://github.com/othneildrew/Best-README-Template">
+    <img src="assets/logo.png" alt="Logo" width="80" height="80">
+  </a>
 
-- precommit, style, pytest, gitmessage, requirements
+  <h3 align="center">Boost2Note</h3>
 
-```bash
-make setup
-```
+  <p align="center">
+    회의 음성 기록을 키워드별 요약으로 보다 기록 관리를 편리하게! 
+    <br />
+    <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10"><strong>Explore the docs(Notion) »</strong></a>
+    <br />
+    <br />
+    <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10">View Demo</a>
+    ·
+    <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10/issues">Report Bug</a>
 
-2. Test
-- implement pytest in `/tests/` path
+  </p>
+</div>
 
-```bash
-make test
-```
 
-3. Execute code formatting & Check lint
+### Members
 
-```bash
-make style
-```
+|김산|엄주언|이동찬|이정현|
+|:---:|:---:|:---:|:---:|
