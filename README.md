@@ -47,7 +47,6 @@
 
 ![boost2Note](https://user-images.githubusercontent.com/93572176/217727766-77701517-a0a2-44cd-840f-8bdbf4962602.gif)
 
-
 ## How to Use?
 
 
