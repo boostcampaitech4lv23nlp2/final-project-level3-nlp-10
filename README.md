@@ -35,7 +35,6 @@
 <img src="https://img.shields.io/badge/streamlit-FF4B4B?style=flat&logo=streamlit&logoColor=white"/> <img src="https://img.shields.io/badge/FastAPI-009688?style=flat&logo=FastAPI&logoColor=white"/>
   </p>
   <img src="assets/team_logo.png" alt="Logo" width="200" >
-  Boost해서 실력의 끝까지. End, 마지막의 마지막까지! 
 </div>
 
 
