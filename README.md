@@ -35,10 +35,12 @@
 <img src="https://img.shields.io/badge/streamlit-FF4B4B?style=flat&logo=streamlit&logoColor=white"/> <img src="https://img.shields.io/badge/FastAPI-009688?style=flat&logo=FastAPI&logoColor=white"/>
   </p>
   <img src="assets/team_logo.png" alt="Logo" width="200" >
+  Boost해서 실력의 끝까지. End, 마지막의 마지막까지! 
 </div>
 
 
 ## **Boost2Note Demo**
+![demo](https://user-images.githubusercontent.com/93572176/218028400-5d459523-fa47-4043-82c5-0853e84acac9.gif)
 
 ## Why **Boost2Note?**
 💬 많은 사람들이 사용하는 **음성 녹음 기록 노트**. 하지만 길어질수록 다시 듣기가 어렵습니다.
@@ -53,13 +55,59 @@
 
 ## What is Boost2Note?
 `Boost2Note`는 업로드한 녹음본에 대하여 키워드를 입력하면 저장된 녹음 기록으로부터 키워드와 관련된 문단을 추출 요약하여 서비스를 제공합니다. 
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/28773464/217975765-1d8241e0-3538-485b-bf9f-683e57599a51.gif"/> 
+</p>
 
-![최종 gif (1)](https://user-images.githubusercontent.com/28773464/217975765-1d8241e0-3538-485b-bf9f-683e57599a51.gif)
+## Structure of Boost2Note
+### Service Structure
+<div align="center">
+<p align="center">
+  <img src="./assets/service_architecture.png"  width="600"/> 
+</p>
+</div>
+
+### Model Structure
+<div align="center">
+<p align="center">
+  <img src="./assets/model_architecture.png"  width="600"/> 
+</p>
+</div>
+
+### Project Structure
+
+```
+├─ app
+│  ├─ frontend
+│  │  ├─ Boost2Note.py
+│  │  └─ pages
+│  │     └─ Total_Note.py
+│  └─ backend
+│     ├─ config.yaml
+│     ├─ server.py
+│     └─ app_utils
+│        ├─ __init__.py
+│        ├─ cache_load.py
+│        ├─ data_process.py
+│        ├─ extract_keyword.py
+│        ├─ key_bert.py
+│        ├─ stt.py
+│        └─ inference.py
+├─ ml
+│ ├─ config
+│ ├─  model
+│ │   ├─ __init__.py
+│ │   └─ retrieval.py
+│ └─  utils
+└─ notebooks
+```
 
 ## How to Use?
 
 
-### Members
+## Members
+<img src="assets/team_logo.png" alt="Logo" width="200" >
 
 |김산|엄주언|이동찬|이정현|
 |:---:|:---:|:---:|:---:|
+| | | | |
