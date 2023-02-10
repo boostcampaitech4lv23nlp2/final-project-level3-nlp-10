@@ -53,7 +53,7 @@
 ## What is Boost2Note?
 `Boost2Note`는 업로드한 녹음본에 대하여 키워드를 입력하면 저장된 녹음 기록으로부터 키워드와 관련된 문단을 추출 요약하여 서비스를 제공합니다. 
 
-![boost2Note](https://user-images.githubusercontent.com/93572176/217727766-77701517-a0a2-44cd-840f-8bdbf4962602.gif)
+![최종 gif (1)](https://user-images.githubusercontent.com/28773464/217975765-1d8241e0-3538-485b-bf9f-683e57599a51.gif)
 
 ## How to Use?
 
