@@ -58,8 +58,9 @@ def read_root():
     return {"Hello": "World"}
 
 
-@app.post("/stt/")
+@app.post("/stt")
 async def get_passages(files: List[bytes] = File()) -> List:
+    print("stt started")
     results = []
     keywords = set()
     passages = set()
@@ -81,6 +82,7 @@ async def get_passages(files: List[bytes] = File()) -> List:
 
 @app.post("/summarize")
 async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
+    print("summarize started")
     sample_num = 3
     dict_keys = dict(keywords)
     keywords = np.array(dict_keys["keywords"])
@@ -99,4 +101,4 @@ async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=30002)
