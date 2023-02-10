@@ -13,8 +13,8 @@ sys.path.insert(0, ".")
 queue = deque()
 st.set_page_config(layout="wide")
 
-port = 30008
-address = ""
+port = 30001  # backend 서버 port와 동일하게 설정 (POST 통신 port)
+address = ""  # "http://{본인 서버 IP 주소}"로 설정
 
 # =======
 #   App
@@ -121,7 +121,7 @@ with con_stt:
                 for uploaded_file in uploaded_files:
                     sound_bytes = uploaded_file.getvalue()
                     files.append(("files", (uploaded_file.name, sound_bytes, uploaded_file.type)))
-                response = requests.post(f"{address}/stt", files=files)
+                response = requests.post(f"{address}:{port}/stt", files=files)
                 result = response.json()
                 print(result)
                 st.session_state["stt_disabled"] = False
@@ -161,7 +161,7 @@ with con2:
         msg = "요약 중입니다.."
         warning_placeholder = st.empty()
         warning_placeholder.warning(msg, icon="🤖")
-        response = requests.post(f"{address}/summarize", json={"keywords": keywords_set})
+        response = requests.post(f"{address}:{port}/summarize", json={"keywords": keywords_set})
         json_res = json.loads(response.text)  # json_res : list
         warning_placeholder.empty()
         print(json_res)
