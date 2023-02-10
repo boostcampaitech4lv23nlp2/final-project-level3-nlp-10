@@ -13,8 +13,8 @@ sys.path.insert(0, ".")
 queue = deque()
 st.set_page_config(layout="wide")
 
-port = 30008
-address = ""
+port = 30001  # nginx 서버 port로 설정
+address = ""  # "http://{본인 서버 IP 주소}" 설정
 
 # =======
 #   App
