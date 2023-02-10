@@ -103,6 +103,15 @@
 
 ## How to Use?
 
+frontend 서버 실행
+```
+streamlit run Boost2Note.py
+```
+
+backend 서버 실행 
+```
+python server.py
+```
 
 ## Members
 <img src="assets/team_logo.png" alt="Logo" width="200" >
