@@ -12,12 +12,11 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/othneildrew/Best-README-Template">
+  <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10">
     <img src="assets/logo.png" alt="Logo" width="200" >
   </a>
 
   <h2 align="center">Boost2Note</h2>
-
   <p align="center">
     회의 음성 기록을 키워드별 요약으로 보다 기록 관리를 편리하게! 
     <br />
@@ -27,6 +26,7 @@
     ·
     <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10/issues">Report Bug</a>
   </p>
+  
   <p align="center">
     <a href="https://www.youtube.com/watch?v=JBFoHI7DOtg"><img src="https://img.shields.io/badge/Presentation(Video)-000000?style=flat-square&logo=youtube&logoColor=fc2403"/></a>  
   </p>
@@ -34,6 +34,7 @@
   <img src="https://img.shields.io/badge/python-3776AB?style=flat&logo=python&logoColor=white"/> <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=PyTorch&logoColor=white"/>    
 <img src="https://img.shields.io/badge/streamlit-FF4B4B?style=flat&logo=streamlit&logoColor=white"/> <img src="https://img.shields.io/badge/FastAPI-009688?style=flat&logo=FastAPI&logoColor=white"/>
   </p>
+  <img src="assets/team_logo.png" alt="Logo" width="200" >
 </div>
 
 
