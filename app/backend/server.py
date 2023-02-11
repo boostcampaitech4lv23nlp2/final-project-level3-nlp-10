@@ -101,4 +101,4 @@ async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=30002)
+    uvicorn.run(app, host="0.0.0.0", port=30001)
