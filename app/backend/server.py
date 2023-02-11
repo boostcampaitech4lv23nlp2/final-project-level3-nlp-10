@@ -44,8 +44,9 @@ def startup_event():
     load_retriever()
     print("FiD model loaded")
     load_small_stt_model()
+    print("Whisper model loaded")
     load_sbert()
-    print("success to loading whisper model")
+    print("success to load model")
 
 
 @app.on_event("shutdown")
