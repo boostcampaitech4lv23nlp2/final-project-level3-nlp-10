@@ -58,12 +58,7 @@ def get_sentence_embedding(model, text: list, batch_size: int = 16) -> torch.Ten
     return torch.cat(embeddings).squeeze()
 
 
-def split_passages(segments, threshold=0.5):
-    if len(segments) <= 1:
-        return segments[0]["text"]
-    passages = []
-    for segment in segments:
-        passages.append(segment["text"])
+def split_passages(passages, threshold=0.5):
     model = load_sbert()
     embedding = get_sentence_embedding(model=model, text=passages, batch_size=16)
     emb_len = len(embedding)
