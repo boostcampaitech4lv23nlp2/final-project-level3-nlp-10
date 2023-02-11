@@ -82,6 +82,11 @@ backend 서버 실행
 python server.py
 ```
 
+nginx 실행
+```
+sudo nginx
+```
+- nginx 설치 및 설정 방법 : [Issue #38](https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10/issues/38)
 # Structure of Boost2Note
 
 ## Project Structure
