@@ -13,7 +13,7 @@ sys.path.insert(0, ".")
 queue = deque()
 st.set_page_config(layout="wide")
 
-port = 30001  # backend 서버 port와 동일하게 설정 (POST 통신 port)
+port = 30008  # backend 서버 port와 동일하게 설정 (POST 통신 port)
 address = ""  # "http://{본인 서버 IP 주소}"로 설정
 
 # =======
@@ -30,7 +30,7 @@ def call_stt(con, files, contents_list):
 
 
 def call_annotated_stt(con, files, contents_list, annotated_texts):
-    print(annotated_texts[0])
+    # print(annotated_texts[0])
     with con:
         for file, contents in zip(files, contents_list):
             expander = st.expander(file.name, expanded=True)
@@ -89,6 +89,9 @@ if "stt_disabled" not in st.session_state:
 if "uploaded" not in st.session_state:
     st.session_state["uploaded"] = []
 
+if "emb_token" not in st.session_state:
+    st.session_state["emb_token"] = None
+
 empty1, con_stt, empty2 = st.columns([0.001, 1.0, 0.001])
 empty1, con2, empty2 = st.columns([0.001, 1.0, 0.001])
 
@@ -115,6 +118,8 @@ with con_stt:
             if uploaded_files is not None:
                 files = []
                 st.session_state["stt_disabled"] = True
+                st.session_state["keywords"] = None
+                st.session_state["emb_token"] = None
                 msg = "변환 중입니다.."
                 warning_placeholder = st.empty()
                 warning_placeholder.warning(msg, icon="🤖")
@@ -123,7 +128,7 @@ with con_stt:
                     files.append(("files", (uploaded_file.name, sound_bytes, uploaded_file.type)))
                 response = requests.post(f"{address}:{port}/stt", files=files)
                 result = response.json()
-                print(result)
+                # print(result)
                 st.session_state["stt_disabled"] = False
                 st.session_state["keywords"] = None
                 warning_placeholder.empty()
@@ -132,6 +137,8 @@ with con_stt:
         if st.session_state["success"]:
             if not st.session_state["keywords"]:
                 st.session_state["keywords"] = result[1]
+            if not st.session_state["emb_token"]:
+                st.session_state["emb_token"] = result[2]
             if not st.session_state["stt"]:
                 st.session_state["stt"] = [uploaded_files, result[0]]
             upload_files, stt_data = st.session_state["stt"]
@@ -161,10 +168,12 @@ with con2:
         msg = "요약 중입니다.."
         warning_placeholder = st.empty()
         warning_placeholder.warning(msg, icon="🤖")
-        response = requests.post(f"{address}:{port}/summarize", json={"keywords": keywords_set})
+        response = requests.post(
+            f"{address}:{port}/summarize", json={"keywords": keywords_set, "emb_name": st.session_state["emb_token"]}
+        )
         json_res = json.loads(response.text)  # json_res : list
         warning_placeholder.empty()
-        print(json_res)
+        # print(json_res)
         call_summary(con2, json_res[0], json_res[1])
         upload_files, stt_data = st.session_state["stt"]
         stt_placeholder.empty()
