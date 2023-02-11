@@ -1,5 +1,7 @@
 from typing import List
 
+import time
+
 import numpy as np
 import uvicorn
 from app_utils import (
@@ -28,8 +30,9 @@ app = FastAPI()
 conf = OmegaConf.load("./config.yaml")
 
 
-class Keywords(BaseModel):
+class SummarizeRequest(BaseModel):
     keywords: list
+    emb_name: str
 
 
 class SummarizeResponse(BaseModel):
@@ -76,29 +79,33 @@ async def get_passages(files: List[bytes] = File()) -> List:
             keywords = get_keyword(result, device=conf.device)
 
         results.append(result)
-    create_context_embedding(list(passages), renew_emb=True)
-    return [results, list(keywords)]
+    emb_name = str(time.time())
+    create_context_embedding(list(passages), renew_emb=True, emb_name=emb_name)
+    print("stt finished")
+    return [results, list(keywords), emb_name]
 
 
 @app.post("/summarize")
-async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
+async def summarize_text(request: SummarizeRequest, response_model=SummarizeResponse):
     print("summarize started")
     sample_num = 3
-    dict_keys = dict(keywords)
-    keywords = np.array(dict_keys["keywords"])
+    request_dict = dict(request)
+    keywords = np.array(request_dict["keywords"])
+    emb_name = request_dict["emb_name"]
     keyword_list = [keywords.tolist()]
     inputs = [keywords]
     for _ in range(sample_num - 1):
         keyword = keywords[np.random.choice(len(keywords), len(keywords) - 1, replace=False)]
         keyword_list.append(keyword.tolist())
         inputs.append(keyword)
-    outputs, top_docs = summarize_fid(inputs, debug=True, renew_emb=False)
+    outputs, top_docs = summarize_fid(inputs, debug=False, renew_emb=False, emb_name=emb_name)
 
     top_docs = {doc for docs in top_docs for doc in docs}
 
     results = [keyword_list, outputs, list(top_docs)]
+    print("summarize finished")
     return results
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=30001)
+    uvicorn.run(app, host="0.0.0.0", port=30002)

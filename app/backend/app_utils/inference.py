@@ -6,7 +6,7 @@ from omegaconf import OmegaConf
 conf = OmegaConf.load("./config.yaml")
 
 
-def summarize_fid(keys: np.array, debug=False, renew_emb=True):
+def summarize_fid(keys: np.array, emb_name, debug=False, renew_emb=True):
     (retriever_tokenizer, reader_tokenizer) = load_tokenizer()
     retriever = load_retriever()
     model = load_model(model_type="fid", device=conf.device)
@@ -16,7 +16,7 @@ def summarize_fid(keys: np.array, debug=False, renew_emb=True):
         queries, padding="max_length", truncation=True, max_length=512, return_tensors="pt"
     )
 
-    top_docs = get_top_docs(retriever, tokenized_query)
+    top_docs = get_top_docs(retriever, tokenized_query, emb_name=emb_name)
     inputs = []
     for query, passages in zip(queries, top_docs):
         input = [f"{reader_tokenizer.bos_token}질문: {query} 문서: {doc}{reader_tokenizer.eos_token}" for doc in passages]
@@ -36,12 +36,12 @@ def summarize_fid(keys: np.array, debug=False, renew_emb=True):
             print(reader_tokenizer.decode(input_ids, skip_special_tokens=True))
         print(outputs[0])
     model.to("cpu")
-    print(model.device)
     return outputs, top_docs
 
 
-def get_top_docs(retriever, query):
+def get_top_docs(retriever, query, emb_name):
     # top_doc_indices: (1, topk) tensor
+    retriever.create_passage_embeddings(emb_name=emb_name, renew_emb=False)
     top_doc_indices = retriever.get_relevant_doc(query, k=conf.topk)
     # top_docs: (1, topk) List
     top_docs = retriever.get_passage_by_indices(top_doc_indices)
