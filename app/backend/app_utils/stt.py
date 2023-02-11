@@ -56,6 +56,9 @@ def predict_stt(soundfile: bytes) -> list:
 
 
 def split_sentences(text: List[str]) -> List[str]:
+    """
+    500자 이상인 경우 hanspell.spell_checker() 함수가 동작하지 않으므로 500자 이하로 구분
+    """
     content_list = [""]
 
     for t in text:
