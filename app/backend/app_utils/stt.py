@@ -1,4 +1,7 @@
+from typing import List
+
 import ffmpeg
+import kss
 import numpy as np
 import whisper
 from app_utils import load_small_stt_model
@@ -47,11 +50,12 @@ def predict_stt(soundfile: bytes) -> list:
     model = load_small_stt_model()
     audio = load_audio_w_bytes(soundfile)
     stt_results = whisper.transcribe(model, audio)
-    results = get_post_process(stt_results)
+    sentences = [seg["text"].strip() for seg in stt_results["segments"]]
+    results = get_post_process(sentences)
     return results
 
 
-def split_sentences(text: list) -> str:
+def split_sentences(text: List[str]) -> List[str]:
     content_list = [""]
 
     for t in text:
@@ -63,9 +67,13 @@ def split_sentences(text: list) -> str:
     return content_list
 
 
-def get_post_process(texts: list):
-    sentences = [seg["text"].strip() for seg in texts["segments"]]
-    sents = split_sentences(sentences)
+def get_post_process(texts: List[str]):
+    sents = split_sentences(texts)
     spelled_sents = spell_checker.check(sents)
-    result = [spelled.checked for spelled in spelled_sents]  # checked : 변환 후
+    spelled_after = [spelled.checked for spelled in spelled_sents]
+
+    result = []
+    for i in spelled_after:
+        result.extend(kss.split_sentences(i))  # 문장 분리
+    result = [f"{r} " for r in result]  # 문장 간 띄어쓰기 추가
     return result
