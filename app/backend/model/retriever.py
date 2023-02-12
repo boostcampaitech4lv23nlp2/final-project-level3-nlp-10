@@ -303,17 +303,15 @@ class FiD_DenseRetrieval:
         self.q_encoder = q_encoder
         self.passages = None
 
-    def create_passage_embeddings(self, emb_save_path=None, renew_emb=False):
-        pickle_name = "dense_embedding.bin"
+    def create_passage_embeddings(self, emb_name=None, renew_emb=False):
+        pickle_name = f"{emb_name}.bin"
         os.makedirs(self.emb_save_path, exist_ok=True)
         emb_path = os.path.join(self.emb_save_path, pickle_name)
-
         if os.path.isfile(emb_path) and renew_emb is False:
             with open(emb_path, "rb") as file:
                 self.p_embedding = pickle.load(file)
-            print("Embedding pickle load.")
+            print(f"Embedding pickle loaded from {emb_path}.")
         else:
-            print("Build passage embedding")
             if self.passages is None:
                 raise Exception("passage embedding 생성 시에는 클래스 생성 시 args, dataset이 필요합니다.")
             tokenized_embs = self.tokenizer(self.passages, padding="max_length", truncation=True, return_tensors="pt")

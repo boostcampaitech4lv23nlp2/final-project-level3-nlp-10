@@ -38,8 +38,13 @@ def load_tokenizer():
 
 
 @lru_cache
-def load_stt_model():
+def load_large_stt_model():
     return whisper.load_model("large")
+
+
+@lru_cache
+def load_small_stt_model():
+    return whisper.load_model("small")
 
 
 @lru_cache
