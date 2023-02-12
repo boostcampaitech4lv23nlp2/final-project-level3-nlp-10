@@ -1,6 +1,5 @@
 from typing import List, Tuple
 
-# import gzip
 import os
 import pickle
 import random
@@ -10,6 +9,7 @@ import kss
 import numpy as np
 import torch
 from datasets import Dataset, DatasetDict, load_metric
+from omegaconf import OmegaConf
 from transformers import (
     BartForConditionalGeneration,
     DataCollatorForSeq2Seq,
@@ -17,6 +17,135 @@ from transformers import (
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
 )
+
+
+class KoBART:
+    def __init__(self, config_path="../config/kobart_config.yaml"):
+        self.config = OmegaConf.load(config_path)
+        self.train_ids, self.train_dialogues, self.train_summaries, self.train_queries = load_pickle_data(
+            self.config.path.train_dataset_path
+        )
+        self.valid_ids, self.valid_dialogues, self.valid_summaries, self.valid_queries = load_pickle_data(
+            self.config.path.valid_dataset_path
+        )
+        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(self.config.path.model_name_or_path)
+        self.model = BartForConditionalGeneration.from_pretrained(self.config.path.model_name_or_path).to("cuda")
+        self.metric = load_metric("rouge")
+        seed_everything(self.config.others.seed)
+
+    def preprocess(self, dialogue_data):
+        for dialogues in dialogue_data:
+            for i, d in enumerate(dialogues):
+                dialogues[i] = re.sub(" +", " ", d)
+
+        for idx in range(len(dialogue_data)):
+            dialogue_data[idx] = "<sep>".join(dialogue_data[idx])
+
+        return dialogue_data
+
+    def add_s_token(self, summary_data):
+        for sample_idx in range(len(summary_data)):
+            # dialogue_data[sample_idx] = f"<s>{dialogue_data[sample_idx]}</s>"
+            summary_data[sample_idx] = f"<s>{summary_data[sample_idx]}</s>"
+        return summary_data
+
+    def preprocess_function(self, examples):
+        model_inputs = self.tokenizer(
+            examples["passage"], max_length=self.config.train.max_input_length, truncation=True
+        )  # padding은 data_collator에서 생성
+
+        # tokenizer for targets
+        with self.tokenizer.as_target_tokenizer():  # kobart의 경우, 동일한 tokenizer를 사용
+            labels = self.tokenizer(
+                examples["summary"], max_length=self.config.train.max_target_length, truncation=True
+            )
+
+        model_inputs["labels"] = labels["input_ids"]
+        return model_inputs
+
+    def compute_metrics(self, eval_pred):
+        predictions, labels = eval_pred
+        decoded_preds = self.tokenizer.batch_decode(predictions, skip_special_tokens=True)
+        # Replace -100 in the labels as we can't decode them. (label_pad_token_id)
+        labels = np.where(labels != -100, labels, self.tokenizer.pad_token_id)
+        decoded_labels = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
+
+        # Rouge expects a newline after each sentence
+        decoded_preds = ["\n".join(kss.split_sentences(pred.strip())) for pred in decoded_preds]
+        decoded_labels = ["\n".join(kss.split_sentences(label.strip())) for label in decoded_labels]
+
+        result = self.metric.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
+        # Extract a few results
+        result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
+
+        # Add mean generated length
+        prediction_lens = [np.count_nonzero(pred != self.tokenizer.pad_token_id) for pred in predictions]
+        result["gen_len"] = np.mean(prediction_lens)
+
+        return {k: round(v, 4) for k, v in result.items()}
+
+    def train(self):
+        self.train_dialogues = self.preprocess(self.train_dialogues)
+        self.valid_dialogues = self.preprocess(self.valid_dialogues)
+
+        if self.tokenizer.name_or_path == "gogamza/kobart-base-v2":
+            self.train_summaries = self.add_s_token(self.train_summaries)
+            self.valid_summaries = self.add_s_token(self.valid_summaries)
+
+        final_train_dialogues = [
+            f"<s>{self.train_queries[i]}<sep>{self.train_dialogues[i]}</s>" for i in range(len(self.train_ids))
+        ]
+        final_valid_dialogues = [
+            f"<s>{self.valid_queries[i]}<sep>{self.valid_dialogues[i]}</s>" for i in range(len(self.valid_ids))
+        ]
+
+        dataset = DatasetDict(
+            {
+                "train": Dataset.from_dict({"passage": final_train_dialogues, "summary": self.train_summaries}),
+                "valid": Dataset.from_dict({"passage": final_valid_dialogues, "summary": self.valid_summaries}),
+            }
+        )
+
+        self.tokenizer.add_special_tokens({"sep_token": "<sep>"})
+        added_token_num = 1
+
+        tokenized_datasets = dataset.map(self.preprocess_function, batched=True)
+
+        self.model.resize_token_embeddings(self.tokenizer.vocab_size + added_token_num)
+
+        args = Seq2SeqTrainingArguments(
+            output_dir=self.config.wandb.project_name,
+            run_name=self.config.wandb.project_name,
+            evaluation_strategy=self.config.train.evaluation_strategy,
+            learning_rate=self.config.train.learning_rate,
+            per_device_train_batch_size=self.config.train.per_device_train_batch_size,
+            per_device_eval_batch_size=self.config.train.per_device_eval_batch_size,
+            save_total_limit=self.config.train.save_total_limit,
+            num_train_epochs=self.config.train.num_train_epochs,
+            predict_with_generate=True,
+            save_steps=1000,
+            eval_steps=1000,
+            lr_scheduler_type=self.config.train.lr_scheduler_type,
+            fp16=self.config.train.fp16,
+            # fp16_opt_level="O1",  # mixed precision mode
+            report_to="wandb",
+            load_best_model_at_end=True,
+            metric_for_best_model=self.config.train.metric_for_best_model,
+        )
+        data_collator = DataCollatorForSeq2Seq(self.tokenizer, model=self.model)
+        trainer = Seq2SeqTrainer(
+            self.model,
+            args,
+            train_dataset=tokenized_datasets["train"],
+            eval_dataset=tokenized_datasets["valid"],
+            data_collator=data_collator,
+            tokenizer=self.tokenizer,
+            compute_metrics=self.compute_metrics,
+        )
+
+        torch.cuda.empty_cache()
+        trainer.train()
+        trainer.save_model()
 
 
 def seed_everything(seed: int = 42):
@@ -29,10 +158,7 @@ def seed_everything(seed: int = 42):
     torch.backends.cudnn.benchmark = True  # type: ignore
 
 
-# pickle load 후 ids, dialogues, summaries로 분리
-def load_pickle_data(path: str) -> Tuple[List[str], List[List[str]], List[str]]:
-    # with gzip.open(path, "rb") as f:
-    #     data = pickle.load(f)
+def load_pickle_data(path: str) -> Tuple[List[str], List[List[str]], List[str], List[str]]:
     with open(path, "rb") as f:
         data = pickle.load(f)
 
@@ -70,154 +196,3 @@ def load_pickle_data(path: str) -> Tuple[List[str], List[List[str]], List[str]]:
     summaries.extend([summary["summary1"] for summary in data["annotation"]])
 
     return ids, dialogues, summaries, queries
-
-
-def preprocess(dialogue_data):
-    for dialogues in dialogue_data:
-        for i, d in enumerate(dialogues):
-            dialogues[i] = re.sub(" +", " ", d)
-
-    for idx in range(len(dialogue_data)):
-        dialogue_data[idx] = "<sep>".join(dialogue_data[idx])
-
-    return dialogue_data
-
-
-def add_s_token(summary_data):
-    for sample_idx in range(len(summary_data)):
-        # dialogue_data[sample_idx] = f"<s>{dialogue_data[sample_idx]}</s>"
-        summary_data[sample_idx] = f"<s>{summary_data[sample_idx]}</s>"
-    return summary_data
-
-
-def preprocess_function(examples):
-    model_inputs = tokenizer(
-        examples["passage"], max_length=max_input_length, truncation=True
-    )  # padding은 data_collator에서 생성할 것
-
-    # tokenizer for targets
-    with tokenizer.as_target_tokenizer():  # kobart의 경우, 동일한 tokenizer를 사용
-        labels = tokenizer(examples["summary"], max_length=max_target_length, truncation=True)
-
-    model_inputs["labels"] = labels["input_ids"]
-    return model_inputs
-
-
-def compute_metrics(eval_pred):
-    predictions, labels = eval_pred
-    decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
-    # Replace -100 in the labels as we can't decode them. (label_pad_token_id)
-    labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-    decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-
-    # Rouge expects a newline after each sentence
-    decoded_preds = ["\n".join(kss.split_sentences(pred.strip())) for pred in decoded_preds]
-    decoded_labels = ["\n".join(kss.split_sentences(label.strip())) for label in decoded_labels]
-
-    result = metric.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
-    # Extract a few results
-    result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
-
-    # Add mean generated length
-    prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in predictions]
-    result["gen_len"] = np.mean(prediction_lens)
-
-    return {k: round(v, 4) for k, v in result.items()}
-
-
-def summarization(text):
-    tokenized_text = tokenizer(text, return_tensors="pt", truncation=False).to("cuda")
-    with torch.no_grad():
-        outputs = model.generate(
-            tokenized_text["input_ids"],
-            do_sample=True,
-            eos_token_id=tokenizer.eos_token_id,
-            max_length=512,
-            # top_p = 0.7,
-            # top_k = 20,
-            num_beams=20,
-            num_return_sequences=1,
-            no_repeat_ngram_size=2,
-            early_stopping=True,
-        )
-        return tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-
-if __name__ == "__main__":
-    seed_everything(42)
-    train_dataset_path = "../data/train_query_v10_keybert.pickle"
-    valid_dataset_path = "../data/valid_query_v10_keybert.pickle"
-    train_ids, train_dialogues, train_summaries, train_queries = load_pickle_data(train_dataset_path)
-    valid_ids, valid_dialogues, valid_summaries, valid_queries = load_pickle_data(valid_dataset_path)
-
-    # tokenizer = PreTrainedTokenizerFast.from_pretrained("hyunwoongko/kobart")
-    # model = BartForConditionalGeneration.from_pretrained("hyunwoongko/kobart")
-    tokenizer = PreTrainedTokenizerFast.from_pretrained("gogamza/kobart-base-v2")
-    model = BartForConditionalGeneration.from_pretrained("gogamza/kobart-base-v2").to("cuda")
-
-    # print(train_dialogues[:3])
-    train_dialogues = preprocess(train_dialogues)
-    valid_dialogues = preprocess(valid_dialogues)
-
-    if tokenizer.name_or_path == "gogamza/kobart-base-v2":
-        train_summaries = add_s_token(train_summaries)
-        valid_summaries = add_s_token(valid_summaries)
-
-    final_train_dialogues = [f"<s>{train_queries[i]}<sep>{train_dialogues[i]}</s>" for i in range(len(train_ids))]
-    final_valid_dialogues = [f"<s>{valid_queries[i]}<sep>{valid_dialogues[i]}</s>" for i in range(len(valid_ids))]
-
-    # print(train_dialogues[:3])
-    dataset = DatasetDict(
-        {
-            "train": Dataset.from_dict({"passage": final_train_dialogues, "summary": train_summaries}),
-            "valid": Dataset.from_dict({"passage": final_valid_dialogues, "summary": valid_summaries}),
-        }
-    )
-
-    tokenizer.add_special_tokens({"sep_token": "<sep>"})
-    added_token_num = 1
-
-    max_input_length = 1024
-    max_target_length = 1024
-
-    tokenized_datasets = dataset.map(preprocess_function, batched=True)
-
-    model.resize_token_embeddings(tokenizer.vocab_size + added_token_num)
-
-    batch_size = 8
-    args = Seq2SeqTrainingArguments(
-        output_dir="gogamza_v11_sep_data_1024_keyword_linear",
-        run_name="gogamza_v11_sep_data_1024_keyword_linear",
-        evaluation_strategy="steps",
-        learning_rate=3e-5,
-        per_device_train_batch_size=batch_size,
-        per_device_eval_batch_size=batch_size,
-        save_total_limit=3,
-        num_train_epochs=10,
-        predict_with_generate=True,
-        save_steps=1000,
-        eval_steps=1000,
-        lr_scheduler_type="linear",  # "cosine_with_restarts"
-        # fp16=True,  # Use mixed precision
-        # fp16_opt_level="O1",  # mixed precision mode
-        report_to="wandb",
-        # dataloader_num_workers=4,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_rouge1",
-        # data_sampler로 랜덤으로 데이터 들어가는지? bucketing?
-    )
-    data_collator = DataCollatorForSeq2Seq(tokenizer, model=model)
-    metric = load_metric("rouge")
-    trainer = Seq2SeqTrainer(
-        model,
-        args,
-        train_dataset=tokenized_datasets["train"],
-        eval_dataset=tokenized_datasets["valid"],
-        data_collator=data_collator,
-        tokenizer=tokenizer,
-        compute_metrics=compute_metrics,
-    )
-
-    torch.cuda.empty_cache()
-    trainer.train()
-    trainer.save_model()  # model_output/pytorch_model.bin, config.json
