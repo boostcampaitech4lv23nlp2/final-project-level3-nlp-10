@@ -1,0 +1,25 @@
+wandb:
+  project_name: "gogamza_v10_sep_data_1024_keyword"
+  entity_name: "boost2end"
+  run_name: "huggingface"
+
+train:
+  evaluation_strategy: "steps"
+  learning_rate: 3e-5
+  per_device_train_batch_size: 8
+  per_device_eval_batch_size: 8
+  save_total_limit: 3
+  num_train_epochs: 10
+  lr_scheduler_type: "cosine_with_restarts"  # "linear"
+  fp16: True  # Use mixed precision
+  metric_for_best_model: "eval_rouge1"
+  max_input_length: 1024
+  max_target_length: 1024
+
+path:
+  model_name_or_path: "gogamza/kobart-base-v2"
+  train_dataset_path: "../data/train_query_v20_keybert.pickle"
+  valid_dataset_path: "../data/valid_query_v20_keybert.pickle"
+
+others:
+  seed: 42
