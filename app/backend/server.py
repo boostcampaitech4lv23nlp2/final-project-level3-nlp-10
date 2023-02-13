@@ -89,16 +89,12 @@ async def get_passages(files: List[bytes] = File()) -> List:
 @app.post("/summarize")
 async def summarize_text(request: SummarizeRequest, response_model=SummarizeResponse):
     print("summarize started")
-    sample_num = 3
     request_dict = dict(request)
     keywords = np.array(request_dict["keywords"])
     emb_name = request_dict["emb_name"]
     keyword_list = [keywords.tolist()]
     inputs = [keywords]
-    for _ in range(sample_num - 1):
-        keyword = keywords[np.random.choice(len(keywords), len(keywords) - 1, replace=False)]
-        keyword_list.append(keyword.tolist())
-        inputs.append(keyword)
+
     outputs, top_docs = summarize_fid(inputs, debug=False, renew_emb=False, emb_name=emb_name)
 
     top_docs = {doc for docs in top_docs for doc in docs}
