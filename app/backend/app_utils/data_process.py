@@ -31,7 +31,7 @@ def convert2context(json_path):
     return context
 
 
-def create_context_embedding(text_list: list, renew_emb=True):
+def create_context_embedding(text_list: list, renew_emb=True, emb_name=None):
     """meeting record를 통해 새로운 embedding vector들을 계산하여 저장합니다.
 
     Args:
@@ -39,7 +39,7 @@ def create_context_embedding(text_list: list, renew_emb=True):
     """
     retriever = load_retriever()
     retriever.passages = text_list
-    retriever.create_passage_embeddings(renew_emb=renew_emb)
+    retriever.create_passage_embeddings(renew_emb=renew_emb, emb_name=emb_name)
 
 
 def get_sentence_embedding(model, text: list, batch_size: int = 16) -> torch.Tensor:
@@ -58,12 +58,7 @@ def get_sentence_embedding(model, text: list, batch_size: int = 16) -> torch.Ten
     return torch.cat(embeddings).squeeze()
 
 
-def split_passages(segments, threshold=0.5):
-    if len(segments) <= 1:
-        return segments[0]["text"]
-    passages = []
-    for segment in segments:
-        passages.append(segment["text"])
+def split_passages(passages, threshold=0.5):
     model = load_sbert()
     embedding = get_sentence_embedding(model=model, text=passages, batch_size=16)
     emb_len = len(embedding)
@@ -73,7 +68,7 @@ def split_passages(segments, threshold=0.5):
         sim = F.cosine_similarity(embedding[[i]], embedding)
         sim_matrix[i] += sim
     sim_matrix = sim_matrix.numpy()
-    print(sim_matrix)
+    # print(sim_matrix)
     splits = [-1] * len(sim_matrix)
     for j in range(emb_len):
         for i in range(j, emb_len):

@@ -1,5 +1,7 @@
 from typing import List
 
+import time
+
 import numpy as np
 import uvicorn
 from app_utils import (
@@ -8,7 +10,7 @@ from app_utils import (
     load_model,
     load_retriever,
     load_sbert,
-    load_stt_model,
+    load_small_stt_model,
     predict_stt,
     split_passages,
     summarize_fid,
@@ -25,12 +27,12 @@ Mecab 설치
 (참조: https://konlpy.org/en/latest/install/)
 """
 app = FastAPI()
-
 conf = OmegaConf.load("./config.yaml")
 
 
-class Keywords(BaseModel):
+class SummarizeRequest(BaseModel):
     keywords: list
+    emb_name: str
 
 
 class SummarizeResponse(BaseModel):
@@ -44,9 +46,10 @@ def startup_event():
     load_model(model_type="sbert")
     load_retriever()
     print("FiD model loaded")
-    load_stt_model()
+    load_small_stt_model()
+    print("Whisper model loaded")
     load_sbert()
-    print("success to loading whisper model")
+    print("success to load model")
 
 
 @app.on_event("shutdown")
@@ -59,33 +62,51 @@ def read_root():
     return {"Hello": "World"}
 
 
-@app.post("/stt/")
-async def get_passages(files: List[bytes] = File()) -> List[List[str]]:
+@app.post("/stt")
+async def get_passages(files: List[bytes] = File()) -> List:
+    print("stt started")
     results = []
+    keywords = set()
+    passages = set()
     for file in files:
         result = predict_stt(file)
         result = split_passages(result)
+
+        if passages and keywords:
+            passages.update(result)
+            keywords.update(get_keyword(result, device=conf.device))
+        else:
+            passages = set(result)
+            keywords = get_keyword(result, device=conf.device)
+
         results.append(result)
-    results = results[0]
-    print(results)
-    create_context_embedding(results, renew_emb=True)
-    keywords = list(get_keyword(results, device=conf.device))
-    print(keywords)
-    return [results, keywords]
+    emb_name = str(time.time())
+    create_context_embedding(list(passages), renew_emb=True, emb_name=emb_name)
+    print("stt finished")
+    return [results, list(keywords), emb_name]
 
 
 @app.post("/summarize")
-async def summarize_text(keywords: Keywords, response_model=SummarizeResponse):
+async def summarize_text(request: SummarizeRequest, response_model=SummarizeResponse):
+    print("summarize started")
     sample_num = 3
-    dict_keys = dict(keywords)
-    keywords = np.array(dict_keys["keywords"])
-    print(keywords)
+    request_dict = dict(request)
+    keywords = np.array(request_dict["keywords"])
+    emb_name = request_dict["emb_name"]
+    keyword_list = [keywords.tolist()]
     inputs = [keywords]
     for _ in range(sample_num - 1):
-        inputs.append(keywords[np.random.choice(len(keywords), len(keywords) - 1, replace=False)])
-    outputs = summarize_fid(inputs, debug=True, renew_emb=False)
-    return outputs
+        keyword = keywords[np.random.choice(len(keywords), len(keywords) - 1, replace=False)]
+        keyword_list.append(keyword.tolist())
+        inputs.append(keyword)
+    outputs, top_docs = summarize_fid(inputs, debug=False, renew_emb=False, emb_name=emb_name)
+
+    top_docs = {doc for docs in top_docs for doc in docs}
+
+    results = [keyword_list, outputs, list(top_docs)]
+    print("summarize finished")
+    return results
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=30002)
