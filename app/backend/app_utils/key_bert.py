@@ -130,11 +130,12 @@ class KeywordBert:
         return keyword
 
 
-def get_keyword(text_list: list, device="cpu") -> set:
+def get_keyword(text: str, device="cpu") -> set:
     keybert_model = app_utils.load_model(model_type="sbert")
     keybert_model.model.to(device)
     keywords = set()
-    for text in text_list:
-        keywords.update(keybert_model.extract_keyword(text=text, top_n=5))
+    # for text in text_list:
+    #     keywords.update(keybert_model.extract_keyword(text=text, top_n=5))
+    keywords.update(keybert_model.extract_keyword(text=text, top_n=10))
     keybert_model.model.to("cpu")
     return keywords
