@@ -30,7 +30,6 @@ def call_stt(con, files, contents_list):
 
 
 def call_annotated_stt(con, files, contents_list, annotated_texts):
-    # print(annotated_texts[0])
     with con:
         for file, contents in zip(files, contents_list):
             expander = st.expander(file.name, expanded=True)
@@ -86,6 +85,9 @@ if "success" not in st.session_state:  # stt 및 문단화 성공에 대한 sess
 if "stt_disabled" not in st.session_state:
     st.session_state["stt_disabled"] = False
 
+if "summary_disabled" not in st.session_state:
+    st.session_state["summary_disabled"] = True
+
 if "uploaded" not in st.session_state:
     st.session_state["uploaded"] = []
 
@@ -125,6 +127,7 @@ with con_stt:
                 warning_placeholder.warning(msg, icon="🤖")
                 for uploaded_file in uploaded_files:
                     sound_bytes = uploaded_file.getvalue()
+                    st.audio(sound_bytes, format="audio/ogg")
                     files.append(("files", (uploaded_file.name, sound_bytes, uploaded_file.type)))
                 response = requests.post(f"{address}:{port}/stt", files=files)
                 result = response.json()
@@ -149,7 +152,7 @@ with con_stt:
             #     st.write(stt_data)
 
     with record_tab:
-        st.write("record")
+        st.write("녹음 기능 업데이트 예정입니다. ")
 
 
 with con2:
@@ -159,12 +162,17 @@ with con2:
         )
         input_keywords = st_tags(label="키워드 직접 입력", text="Press enter to add more")
         keywords_set = list(set(options + [i.strip(" ") for i in input_keywords if i.strip(" ") != ""]))
+        if len(keywords_set) > 0:
+            st.session_state["summary_disabled"] = False
+        else:
+            st.session_state["summary_disabled"] = True
         # 띄어쓰기 제거 및 중복 제거
 
     else:
         options = st.multiselect("주요 키워드", list(queue), on_change=callback_multiselect, args=(stt_placeholder,))
-
-    if st.button("요약하기", key="summarization"):
+    summary_button = st.button("요약하기", key="summarization", disabled=st.session_state["summary_disabled"])
+    if summary_button:
+        st.session_state["summary_disabled"] = True
         msg = "요약 중입니다.."
         warning_placeholder = st.empty()
         warning_placeholder.warning(msg, icon="🤖")
@@ -178,3 +186,4 @@ with con2:
         upload_files, stt_data = st.session_state["stt"]
         stt_placeholder.empty()
         call_annotated_stt(stt_placeholder.container(), uploaded_files, stt_data, json_res[2])
+        st.session_state["summary_disabled"] = True
