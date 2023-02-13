@@ -24,6 +24,7 @@ address = ""  # "http://{본인 서버 IP 주소}"로 설정
 def call_stt(con, files, contents_list):
     with con:
         for file, contents in zip(files, contents_list):
+            st.audio(file.getvalue(), format="audio/ogg")
             expander = st.expander(file.name, expanded=True)
             for content in contents:
                 expander.markdown(content)
@@ -32,6 +33,7 @@ def call_stt(con, files, contents_list):
 def call_annotated_stt(con, files, contents_list, annotated_texts):
     with con:
         for file, contents in zip(files, contents_list):
+            st.audio(file.getvalue(), format="audio/ogg")
             expander = st.expander(file.name, expanded=True)
             for content in contents:
                 if content in annotated_texts:
@@ -94,6 +96,9 @@ if "uploaded" not in st.session_state:
 if "emb_token" not in st.session_state:
     st.session_state["emb_token"] = None
 
+if "summaries" not in st.session_state:
+    st.session_state["summaries"] = []
+
 empty1, con_stt, empty2 = st.columns([0.001, 1.0, 0.001])
 empty1, con2, empty2 = st.columns([0.001, 1.0, 0.001])
 
@@ -127,7 +132,6 @@ with con_stt:
                 warning_placeholder.warning(msg, icon="🤖")
                 for uploaded_file in uploaded_files:
                     sound_bytes = uploaded_file.getvalue()
-                    st.audio(sound_bytes, format="audio/ogg")
                     files.append(("files", (uploaded_file.name, sound_bytes, uploaded_file.type)))
                 response = requests.post(f"{address}:{port}/stt", files=files)
                 result = response.json()
@@ -147,12 +151,8 @@ with con_stt:
             upload_files, stt_data = st.session_state["stt"]
             stt_placeholder.empty()
             call_stt(stt_placeholder.container(), uploaded_files, stt_data)
-            # with st.expander("STT 원본 텍스트", expanded=True):
-            # for stt_data in st.session_state["stt"]:
-            #     st.write(stt_data)
-
     with record_tab:
-        st.write("녹음 기능 업데이트 예정입니다. ")
+        st.write("직접 녹음 기능은 업데이트 예정입니다. ")
 
 
 with con2:
@@ -161,12 +161,13 @@ with con2:
             "주요 키워드", st.session_state["keywords"], on_change=callback_multiselect, args=(stt_placeholder,)
         )
         input_keywords = st_tags(label="키워드 직접 입력", text="Press enter to add more")
-        keywords_set = list(set(options + [i.strip(" ") for i in input_keywords if i.strip(" ") != ""]))
+        keywords_set = list(
+            set(options + [i.strip(" ") for i in input_keywords if i.strip(" ") != ""])
+        )  # 띄어쓰기 제거 및 중복 제거
         if len(keywords_set) > 0:
             st.session_state["summary_disabled"] = False
         else:
             st.session_state["summary_disabled"] = True
-        # 띄어쓰기 제거 및 중복 제거
 
     else:
         options = st.multiselect("주요 키워드", list(queue), on_change=callback_multiselect, args=(stt_placeholder,))
@@ -181,9 +182,14 @@ with con2:
         )
         json_res = json.loads(response.text)  # json_res : list
         warning_placeholder.empty()
-        # print(json_res)
-        call_summary(con2, json_res[0], json_res[1])
+        if len(json_res[0][0]) > 100:
+            st.session_state["summaries"].append((json_res[0], ["Jail Break: HELP..."]))  # Easter Egg
+        else:
+            st.session_state["summaries"].append((json_res[0], json_res[1]))
         upload_files, stt_data = st.session_state["stt"]
         stt_placeholder.empty()
         call_annotated_stt(stt_placeholder.container(), uploaded_files, stt_data, json_res[2])
         st.session_state["summary_disabled"] = True
+
+    for title, summary in reversed(st.session_state["summaries"]):
+        call_summary(con2, title, summary)
