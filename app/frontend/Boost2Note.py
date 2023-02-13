@@ -55,7 +55,7 @@ class UploadedFile(io.BytesIO):
 def call_stt(con, files, contents_list):
     with con:
         for file, contents in zip(files, contents_list):
-            st.audio(file.getvalue(), format="audio/ogg")
+            # st.audio(file.getvalue(), format="audio/ogg")
             expander = st.expander(file.name, expanded=True)
 
             for content in contents:
@@ -65,7 +65,7 @@ def call_stt(con, files, contents_list):
 def call_annotated_stt(con, files, contents_list, annotated_texts):
     with con:
         for file, contents in zip(files, contents_list):
-            st.audio(file.getvalue(), format="audio/ogg")
+            # st.audio(file.getvalue(), format="audio/ogg")
             expander = st.expander(file.name, expanded=True)
             for content in contents:
                 if content in annotated_texts:
@@ -95,10 +95,14 @@ def callback_multiselect(placeholder):
 
 
 def check_files(uploaded_files):
+    # session에 저장된 파일과 file uploader에 저장된 파일 유무 비교
     new_data = []
+    if not uploaded_files:
+        return
     if not st.session_state["stt"]:
         return
     for file, stt_data in zip(*st.session_state["stt"]):
+        print(file.id)
         for uploaded_file in uploaded_files:
             if file.id == uploaded_file.id:
                 new_data.append([file, stt_data])
@@ -150,14 +154,13 @@ with con_stt:
             type=["wav", "mp4", "mp3"],
             on_change=callback_upload,
         )
-        check_files(uploaded_files)
+        check_files(uploaded_files)  # 남아있는 파일과 불일치 파일 확인
         ex_button = st.button("예시 파일 변환하기", key="ex_button", disabled=st.session_state["stt_disabled"])
         stt_button = st.button("변환하기", key="stt_button", disabled=st.session_state["stt_disabled"])
         if ex_button:
             audio_bytes = Path("./test2.mp3").read_bytes()
             file = UploadedFile(UploadedFileRec("3000", "example.mp3", "mp3", (audio_bytes)))
             uploaded_files.append(file)
-
             files = []
             st.session_state["keywords"] = None
             st.session_state["emb_token"] = None
@@ -207,7 +210,8 @@ with con_stt:
             if not st.session_state["stt"]:
                 print("stt:", result)
                 st.session_state["stt"] = [uploaded_files, result[0]]
-            upload_files, stt_data = st.session_state["stt"]
+            uploaded_files, stt_data = st.session_state["stt"]
+            print("check: ", st.session_state["stt"])
             stt_placeholder.empty()
             call_stt(stt_placeholder.container(), uploaded_files, stt_data)
     with record_tab:
