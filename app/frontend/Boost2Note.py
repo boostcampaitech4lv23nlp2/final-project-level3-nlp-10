@@ -1,6 +1,10 @@
+from typing import NamedTuple
+
+import io
 import json
 import sys
 from collections import deque
+from pathlib import Path
 
 import requests
 import streamlit as st
@@ -13,12 +17,39 @@ sys.path.insert(0, ".")
 queue = deque()
 st.set_page_config(layout="wide")
 
-port = 30008  # backend 서버 port와 동일하게 설정 (POST 통신 port)
-address = ""  # "http://{본인 서버 IP 주소}"로 설정
+port = 30002  # backend 서버 port와 동일하게 설정 (POST 통신 port)
+address = "http://118.67.130.208"  # "http://{본인 서버 IP 주소}"로 설정
 
 # =======
 #   App
 # =======
+
+
+class UploadedFileRec(NamedTuple):
+    """Metadata and raw bytes for an uploaded file. Immutable."""
+
+    id: str
+    name: str
+    type: str
+    data: bytes
+
+
+class UploadedFile(io.BytesIO):
+    """A mutable uploaded file.
+    This class extends BytesIO, which has copy-on-write semantics when
+    initialized with `bytes`.
+    """
+
+    def __init__(self, record: UploadedFileRec):
+        # BytesIO's copy-on-write semantics doesn't seem to be mentioned in
+        # the Python docs - possibly because it's a CPython-only optimization
+        # and not guaranteed to be in other Python runtimes. But it's detailed
+        # here: https://hg.python.org/cpython/rev/79a5fbe2c78f
+        super(UploadedFile, self).__init__(record.data)
+        self.id = record.id
+        self.name = record.name
+        self.type = record.type
+        self.size = len(record.data)
 
 
 def call_stt(con, files, contents_list):
@@ -26,6 +57,7 @@ def call_stt(con, files, contents_list):
         for file, contents in zip(files, contents_list):
             st.audio(file.getvalue(), format="audio/ogg")
             expander = st.expander(file.name, expanded=True)
+
             for content in contents:
                 expander.markdown(content)
 
@@ -119,9 +151,31 @@ with con_stt:
             on_change=callback_upload,
         )
         check_files(uploaded_files)
-
+        ex_button = st.button("예시 파일 변환하기", key="ex_button", disabled=st.session_state["stt_disabled"])
         stt_button = st.button("변환하기", key="stt_button", disabled=st.session_state["stt_disabled"])
-        if stt_button:
+        if ex_button:
+            audio_bytes = Path("./test2.mp3").read_bytes()
+            file = UploadedFile(UploadedFileRec("3000", "example.mp3", "mp3", (audio_bytes)))
+            uploaded_files.append(file)
+
+            files = []
+            st.session_state["keywords"] = None
+            st.session_state["emb_token"] = None
+            msg = "변환 중입니다.."
+            warning_placeholder = st.empty()
+            warning_placeholder.warning(msg, icon="🤖")
+            for uploaded_file in uploaded_files:
+                sound_bytes = uploaded_file.getvalue()
+                files.append(("files", (uploaded_file.name, sound_bytes, uploaded_file.type)))
+
+            response = requests.post(f"{address}:{port}/stt", files=files)
+            result = response.json()
+            print("result: ", result)
+            st.session_state["keywords"] = None
+            warning_placeholder.empty()
+            st.session_state["success"] = st.success("변환 완료")
+
+        elif stt_button:
             if uploaded_files is not None:
                 files = []
                 st.session_state["stt_disabled"] = True
@@ -133,20 +187,25 @@ with con_stt:
                 for uploaded_file in uploaded_files:
                     sound_bytes = uploaded_file.getvalue()
                     files.append(("files", (uploaded_file.name, sound_bytes, uploaded_file.type)))
+
                 response = requests.post(f"{address}:{port}/stt", files=files)
                 result = response.json()
-                # print(result)
+                print("result: ", result)
                 st.session_state["stt_disabled"] = False
                 st.session_state["keywords"] = None
                 warning_placeholder.empty()
                 st.session_state["success"] = st.success("변환 완료")
+
         stt_placeholder = st.empty()
         if st.session_state["success"]:
             if not st.session_state["keywords"]:
+                print("keywords:", result[1])
                 st.session_state["keywords"] = result[1]
             if not st.session_state["emb_token"]:
+                print("emb_token:", result[2])
                 st.session_state["emb_token"] = result[2]
             if not st.session_state["stt"]:
+                print("stt:", result)
                 st.session_state["stt"] = [uploaded_files, result[0]]
             upload_files, stt_data = st.session_state["stt"]
             stt_placeholder.empty()
