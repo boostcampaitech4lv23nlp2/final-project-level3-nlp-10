@@ -383,7 +383,6 @@ class RagTrainer(Trainer):
 
         self.model.cuda()
         for epoch in range(int(self.conf.num_train_epochs)):
-            self.eval()
             self.model.train()
             self.model.zero_grad()
             torch.cuda.empty_cache()
@@ -410,14 +409,13 @@ class RagTrainer(Trainer):
                     outputs = self.model(
                         input_ids=batch["input_ids"],
                         attention_mask=batch["attention_mask"],
-                        decoder_input_ids=batch["decoder_input_ids"],
                         labels=lm_labels,
                         n_docs=self.n_docs,
                         reduce_loss=True,
-                        use_cache=False,
+                        use_cache=True,
                         do_marginalize=True,
                     )
-                    loss = outputs.loss
+                    loss = outputs.loss / self.conf.per_device_train_batch_size
                     loss.backward()
                     tepoch.set_postfix(loss=f"{str(loss.item())}")
                     self.optimizer.step()
@@ -431,6 +429,7 @@ class RagTrainer(Trainer):
             if epoch % self.save_period == 0:
                 filename = f"epoch_{epoch}"
                 self.save(filename)
+            self.eval()
 
     def ids_to_clean_text(self, generated_ids: List[int], tokenizer=None):
         if not tokenizer:
@@ -484,7 +483,8 @@ class RagTrainer(Trainer):
                 preds: List[str] = self.ids_to_clean_text(generated_ids=generated_ids)
                 target: List[List] = [[target] for target in self.ids_to_clean_text(batch["decoder_input_ids"])]
 
-                rouge = rouge_metric.compute(predictions=[preds], references=[target])
+                rouge_metric.add_batch(predictions=[preds], references=[target])
+                rouge = rouge_metric.compute()
                 print(rouge["rouge1"].mid.precision)
                 rouge1_p.append(rouge["rouge1"].mid.precision)
                 rouge1_r.append(rouge["rouge1"].mid.recall)
