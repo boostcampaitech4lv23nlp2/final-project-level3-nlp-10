@@ -70,14 +70,15 @@ async def get_passages(files: List[bytes] = File()) -> List:
     passages = set()
     for file in files:
         result = predict_stt(file)
+        text = "".join(result)
         result = split_passages(result)
 
         if passages and keywords:
             passages.update(result)
-            keywords.update(get_keyword(result, device=conf.device))
+            keywords.update(get_keyword(text, device=conf.device))
         else:
             passages = set(result)
-            keywords = get_keyword(result, device=conf.device)
+            keywords = get_keyword(text, device=conf.device)
 
         results.append(result)
     emb_name = str(time.time())
