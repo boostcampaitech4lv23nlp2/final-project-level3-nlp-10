@@ -20,7 +20,7 @@
   <p align="center">
     회의 음성 기록을 키워드별 요약으로 보다 기록 관리를 편리하게! 
     <br />
-    <a href="https://www.notion.so/Wrap-up-Report-99a61038590a4966ada733bd5947974e?pvs=4">Explore the docs(Notion)</a>
+    <a href="https://gray-margin-3b9.notion.site/Wrap-up-Report-99a61038590a4966ada733bd5947974e">Explore the docs(Notion)</a>
     ·
     <a href="https://www.youtube.com/watch?v=JBFoHI7DOtg">Presentation(Youtube)</a>  
     ·
