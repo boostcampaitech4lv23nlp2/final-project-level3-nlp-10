@@ -20,16 +20,17 @@
   <p align="center">
     회의 음성 기록을 키워드별 요약으로 보다 기록 관리를 편리하게! 
     <br />
-    <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10"><strong>Explore the docs(Notion) »</strong></a>
+    <a href="https://www.notion.so/Wrap-up-Report-99a61038590a4966ada733bd5947974e?pvs=4">Explore the docs(Notion)</a>
+    ·
+    <a href="https://www.youtube.com/watch?v=JBFoHI7DOtg">Presentation(Youtube)</a>  
     ·
     <a href="http://115.85.180.71:30001">View Demo</a>
     ·
     <a href="https://github.com/boostcampaitech4lv23nlp2/final-project-level3-nlp-10/issues">Report Bug</a>
+    
+    
   </p>
   
-  <p align="center">
-    <a href="https://www.youtube.com/watch?v=JBFoHI7DOtg"><img src="https://img.shields.io/badge/Presentation(Video)-000000?style=flat-square&logo=youtube&logoColor=fc2403"/></a>  
-  </p>
   <p align="center">
   <img src="https://img.shields.io/badge/python-3776AB?style=flat&logo=python&logoColor=white"/> <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat&logo=PyTorch&logoColor=white"/>    
 <img src="https://img.shields.io/badge/streamlit-FF4B4B?style=flat&logo=streamlit&logoColor=yellow"/> <img src="https://img.shields.io/badge/FastAPI-009688?style=flat&logo=FastAPI&logoColor=yellow"/>
