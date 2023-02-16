@@ -1,7 +1,11 @@
+from typing import List
+
 import ffmpeg
+import kss
 import numpy as np
 import whisper
-from app_utils import load_stt_model
+from app_utils import load_small_stt_model
+from hanspell import spell_checker
 
 
 def load_audio_w_bytes(file: bytes, sr: int = 16000):
@@ -42,9 +46,37 @@ def load_audio_w_bytes(file: bytes, sr: int = 16000):
     return np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
 
 
-def predict_stt(soundfile: bytes):
-    model = load_stt_model()
-    # model = whisper.load_model("base")
+def predict_stt(soundfile: bytes) -> list:
+    model = load_small_stt_model()
     audio = load_audio_w_bytes(soundfile)
-    results = whisper.transcribe(model, audio)
-    return results["segments"]
+    stt_results = whisper.transcribe(model, audio)
+    sentences = [seg["text"].strip() for seg in stt_results["segments"]]
+    results = get_post_process(sentences)
+    return results
+
+
+def split_sentences(text: List[str]) -> List[str]:
+    """
+    500자 이상인 경우 hanspell.spell_checker() 함수가 동작하지 않으므로 500자 이하로 구분
+    """
+    content_list = [""]
+
+    for t in text:
+        if len(content_list[-1]) + len(t) < 500:
+            content_list[-1] += t
+        else:
+            content_list.append(t)
+
+    return content_list
+
+
+def get_post_process(texts: List[str]):
+    sents = split_sentences(texts)
+    spelled_sents = spell_checker.check(sents)
+    spelled_after = [spelled.checked for spelled in spelled_sents]
+
+    result = []
+    for i in spelled_after:
+        result.extend(kss.split_sentences(i))  # 문장 분리
+    result = [f"{r} " for r in result]  # 문장 간 띄어쓰기 추가
+    return result
